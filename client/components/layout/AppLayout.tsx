@@ -23,25 +23,33 @@ export function AppLayout({ children, showNav = true, showEmergencyFAB = true }:
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen flex flex-col">
       {/* Trust Signals Header */}
-      <header className="sticky top-0 z-30 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-3">
+      <header className="sticky top-0 z-30 px-4 pt-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white">
-              🏥 Vaidya
-            </h1>
+          <div className="ui-shell flex w-full items-center justify-between rounded-[24px] px-5 py-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand text-sm font-bold tracking-[0.2em] text-white">
+                VA
+              </div>
+              <div>
+                <p className="eyebrow">Autonomous Care Assistant</p>
+                <h1 className="text-xl font-semibold text-foreground md:text-2xl">
+                  Vaidya
+                </h1>
+              </div>
+            </div>
+            <TrustSignals
+              abhaLinked={user.abhaLinked}
+              language={user.language}
+              consentProtected={true}
+            />
           </div>
-          <TrustSignals 
-            abhaLinked={user.abhaLinked}
-            language={user.language}
-            consentProtected={true}
-          />
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 pb-20 md:pb-24">
+      <main className="flex-1 pb-24 pt-5 md:pb-28">
         {children}
       </main>
 

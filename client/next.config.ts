@@ -6,7 +6,8 @@ const nextConfig: NextConfig = {
 
   // Enable instrumentation hook for app startup initialization
   experimental: {
-    optimizeCss: true,
+    // Note: optimizeCss disabled due to critters dependency issues in some environments
+    // optimizeCss: true,
     optimizePackageImports: ['@google-cloud/vertexai', '@google-cloud/firestore'],
   },
 

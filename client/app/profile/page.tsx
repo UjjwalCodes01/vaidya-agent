@@ -1,47 +1,119 @@
 'use client';
 
 import { AppLayout } from '@/components/layout';
+import { Button } from '@/components/shared';
+import { useToast } from '@/components/shared/Toast';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function ProfilePage() {
+  const { showToast } = useToast();
+  const router = useRouter();
+
+  const handleEditProfile = () => {
+    showToast('Opening profile editor...', 'info');
+  };
+
+  const handleLinkABHA = () => {
+    showToast('Redirecting to ABDM portal...', 'info');
+    setTimeout(() => {
+      showToast('ABHA linking requires OTP verification', 'warning');
+    }, 1500);
+  };
+
+  const handleManageConsents = () => {
+    showToast('Opening consent management...', 'info');
+    router.push('/records');
+  };
+
+  const handleViewAccessHistory = () => {
+    showToast('Loading access history...', 'info');
+    router.push('/records');
+  };
+
+  const handleDownloadData = () => {
+    showToast('Preparing data export...', 'info');
+    setTimeout(() => {
+      showToast('Your data export is ready!', 'success');
+    }, 2000);
+  };
+
+  const handleChangePassword = () => {
+    showToast('Opening password change dialog...', 'info');
+  };
+
+  const handleViewSessions = () => {
+    showToast('Loading active sessions...', 'info');
+  };
+
+  const handleTerms = () => {
+    showToast('Opening Terms of Service...', 'info');
+  };
+
+  const handlePrivacy = () => {
+    showToast('Opening Privacy Policy...', 'info');
+  };
+
+  const handleHelp = () => {
+    showToast('Opening Help & Support...', 'info');
+  };
+
+  const handleLogout = async () => {
+    showToast('Logging out...', 'info');
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      showToast('Logged out successfully', 'success');
+      setTimeout(() => router.push('/auth/login'), 1000);
+    } catch {
+      showToast('Logout failed', 'error');
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    showToast('Account deletion requires confirmation', 'warning');
+  };
+
   return (
     <AppLayout>
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
         {/* User Identity Card */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg p-6 shadow-lg">
+        <div className="bg-gradient-to-br from-[var(--brand)] to-[var(--brand)]/80 text-white rounded-[24px] p-6">
           <div className="flex items-center gap-4 mb-4">
-            <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center text-4xl">
+            <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center text-4xl backdrop-blur-sm">
               👤
             </div>
             <div>
               <h2 className="text-2xl font-bold">Guest User</h2>
-              <p className="text-blue-100">guest@vaidya.health</p>
+              <p className="text-white/80">guest@vaidya.health</p>
             </div>
           </div>
-          <button className="bg-white text-blue-700 px-4 py-2 rounded-lg font-medium hover:bg-blue-50 transition-colors">
+          <button 
+            onClick={handleEditProfile}
+            className="bg-white text-[var(--brand)] px-4 py-2 rounded-xl font-medium hover:bg-white/90 transition-colors"
+          >
             Edit Profile
           </button>
         </div>
 
         {/* ABHA Account Management */}
         <Section title="ABHA Health ID" icon="🔗">
-          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-4 mb-4">
+          <div className="bg-[var(--accent)]/10 border border-[var(--accent)]/30 rounded-xl p-4 mb-4">
             <div className="flex items-start gap-2">
               <span className="text-xl">⚠️</span>
               <div>
-                <p className="font-medium text-amber-900 dark:text-amber-100 mb-1">
+                <p className="font-medium text-[var(--foreground)] mb-1">
                   ABHA not linked
                 </p>
-                <p className="text-sm text-amber-800 dark:text-amber-200">
+                <p className="text-sm text-[var(--muted)]">
                   Link your ABHA to access complete health records across all healthcare facilities
                 </p>
               </div>
             </div>
           </div>
-          <button className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-green-500">
+          <Button onClick={handleLinkABHA} className="w-full">
             Link ABHA Account →
-          </button>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+          </Button>
+          <p className="text-xs text-[var(--muted)] mt-2">
             You will be redirected to ABDM portal for secure authentication
           </p>
         </Section>
@@ -50,10 +122,10 @@ export default function ProfilePage() {
         <Section title="Language & Region" icon="🌐">
           <div className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
                 Primary Language
               </label>
-              <select className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <select className="w-full px-4 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/50">
                 <option value="en">English</option>
                 <option value="hi">हिंदी (Hindi)</option>
                 <option value="kn">ಕನ್ನಡ (Kannada)</option>
@@ -67,10 +139,10 @@ export default function ProfilePage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
                 Region
               </label>
-              <select className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <select className="w-full px-4 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/50">
                 <option>Delhi NCR</option>
                 <option>Mumbai</option>
                 <option>Bangalore</option>
@@ -113,20 +185,17 @@ export default function ProfilePage() {
         {/* Privacy & Consent */}
         <Section title="Privacy & Consent" icon="🔐">
           <div className="space-y-3">
-            <button className="w-full flex items-center justify-between bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 px-4 py-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-650 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <span className="font-medium text-gray-700 dark:text-gray-300">Manage consent settings</span>
-              <span>→</span>
-            </button>
+            <SettingsButton onClick={handleManageConsents}>
+              Manage consent settings
+            </SettingsButton>
             
-            <button className="w-full flex items-center justify-between bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 px-4 py-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-650 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <span className="font-medium text-gray-700 dark:text-gray-300">View data access history</span>
-              <span>→</span>
-            </button>
+            <SettingsButton onClick={handleViewAccessHistory}>
+              View data access history
+            </SettingsButton>
             
-            <button className="w-full flex items-center justify-between bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 px-4 py-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-650 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <span className="font-medium text-gray-700 dark:text-gray-300">Download my data</span>
-              <span>📥</span>
-            </button>
+            <SettingsButton onClick={handleDownloadData} icon="📥">
+              Download my data
+            </SettingsButton>
           </div>
         </Section>
 
@@ -159,40 +228,41 @@ export default function ProfilePage() {
         {/* Security */}
         <Section title="Security" icon="🔒">
           <div className="space-y-3">
-            <button className="w-full flex items-center justify-between bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 px-4 py-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-650 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <span className="font-medium text-gray-700 dark:text-gray-300">Change password</span>
-              <span>→</span>
-            </button>
+            <SettingsButton onClick={handleChangePassword}>
+              Change password
+            </SettingsButton>
             
-            <button className="w-full flex items-center justify-between bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 px-4 py-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-650 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <span className="font-medium text-gray-700 dark:text-gray-300">Active sessions</span>
-              <span>→</span>
-            </button>
+            <SettingsButton onClick={handleViewSessions}>
+              Active sessions
+            </SettingsButton>
           </div>
         </Section>
 
         {/* About */}
         <Section title="About" icon="ℹ️">
-          <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-            <p><strong>Version:</strong> 1.0.0</p>
-            <p><strong>Build:</strong> March 2026</p>
-            <div className="pt-2 space-x-3">
-              <button className="text-blue-600 dark:text-blue-400 hover:underline">Terms of Service</button>
-              <button className="text-blue-600 dark:text-blue-400 hover:underline">Privacy Policy</button>
-              <button className="text-blue-600 dark:text-blue-400 hover:underline">Help & Support</button>
+          <div className="space-y-2 text-sm text-[var(--muted)]">
+            <p><strong className="text-[var(--foreground)]">Version:</strong> 1.0.0</p>
+            <p><strong className="text-[var(--foreground)]">Build:</strong> March 2026</p>
+            <div className="pt-2 flex flex-wrap gap-3">
+              <button onClick={handleTerms} className="text-[var(--brand)] hover:underline">Terms of Service</button>
+              <button onClick={handlePrivacy} className="text-[var(--brand)] hover:underline">Privacy Policy</button>
+              <button onClick={handleHelp} className="text-[var(--brand)] hover:underline">Help & Support</button>
             </div>
           </div>
         </Section>
 
         {/* Logout */}
-        <button className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-red-500">
-          🚪 Logout
-        </button>
+        <Button variant="danger" className="w-full" onClick={handleLogout} icon={<span>🚪</span>}>
+          Logout
+        </Button>
 
         {/* Danger Zone */}
-        <div className="border-2 border-red-200 dark:border-red-800 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-red-700 dark:text-red-400 mb-2">Danger Zone</h3>
-          <button className="text-sm text-red-600 dark:text-red-400 hover:underline">
+        <div className="border-2 border-[var(--danger)]/30 rounded-xl p-4">
+          <h3 className="text-sm font-semibold text-[var(--danger)] mb-2">Danger Zone</h3>
+          <button 
+            onClick={handleDeleteAccount}
+            className="text-sm text-[var(--danger)] hover:underline"
+          >
             Delete my account permanently
           </button>
         </div>
@@ -203,13 +273,29 @@ export default function ProfilePage() {
 
 function Section({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+    <div className="bg-[var(--surface-strong)] rounded-xl p-6 border border-[var(--border)]">
+      <h3 className="text-lg font-semibold text-[var(--foreground)] mb-4 flex items-center gap-2">
         <span>{icon}</span>
         {title}
       </h3>
       {children}
     </div>
+  );
+}
+
+function SettingsButton({ children, onClick, icon }: { 
+  children: React.ReactNode; 
+  onClick: () => void;
+  icon?: string;
+}) {
+  return (
+    <button 
+      onClick={onClick}
+      className="w-full flex items-center justify-between bg-[var(--surface)] border border-[var(--border)] px-4 py-3 rounded-xl hover:bg-[var(--brand-soft)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/50"
+    >
+      <span className="font-medium text-[var(--foreground)]">{children}</span>
+      <span>{icon || '→'}</span>
+    </button>
   );
 }
 
@@ -223,24 +309,24 @@ function Toggle({ label, description, defaultChecked }: {
   return (
     <div className="flex items-start justify-between gap-4">
       <div className="flex-1">
-        <p className="font-medium text-gray-700 dark:text-gray-300">{label}</p>
+        <p className="font-medium text-[var(--foreground)]">{label}</p>
         {description && (
-          <p className="text-sm text-gray-500 dark:text-gray-400">{description}</p>
+          <p className="text-sm text-[var(--muted)]">{description}</p>
         )}
       </div>
       <button
         onClick={() => setChecked(!checked)}
         className={`
           relative inline-flex h-6 w-11 items-center rounded-full transition-colors
-          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
-          ${checked ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}
+          focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/50 focus:ring-offset-2
+          ${checked ? 'bg-[var(--brand)]' : 'bg-[var(--border)]'}
         `}
         role="switch"
         aria-checked={checked}
       >
         <span
           className={`
-            inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+            inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm
             ${checked ? 'translate-x-6' : 'translate-x-1'}
           `}
         />

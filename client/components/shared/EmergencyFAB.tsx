@@ -11,7 +11,7 @@ export function EmergencyFAB() {
 
   const handleEmergencyClick = () => {
     // TODO: Integrate with emergency routing
-    if (typeof window !== 'undefined' && window.confirm('🚨 Call emergency services or find nearest hospital?')) {
+    if (typeof window !== 'undefined' && window.confirm('Call emergency services or find the nearest hospital?')) {
       // Navigate to care finder in emergency mode
       window.location.href = '/care-finder?mode=emergency';
     }
@@ -27,19 +27,18 @@ export function EmergencyFAB() {
       onMouseLeave={() => setIsPressed(false)}
       className={`
         fixed bottom-24 right-6 z-50
-        w-16 h-16 md:w-20 md:h-20
-        bg-red-600 hover:bg-red-700 active:bg-red-800
-        text-white rounded-full shadow-2xl
-        flex items-center justify-center
+        min-w-[136px] rounded-full
+        bg-danger hover:brightness-95 active:brightness-90
+        px-5 py-4 text-white shadow-[0_18px_42px_rgba(184,79,69,0.32)]
+        flex items-center justify-center gap-2
         transition-all duration-200
-        ${isPressed ? 'scale-95' : 'scale-100 hover:scale-110'}
+        ${isPressed ? 'scale-95' : 'scale-100 hover:-translate-y-0.5'}
         focus:outline-none focus:ring-4 focus:ring-red-300
-        animate-pulse
       `}
       aria-label="Emergency - Find nearest hospital or call help"
       title="Emergency Help"
     >
-      <span className="text-3xl md:text-4xl">🚨</span>
+      <span className="text-sm font-semibold tracking-[0.18em] uppercase">Emergency</span>
     </button>
   );
 }

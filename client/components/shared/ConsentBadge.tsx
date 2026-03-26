@@ -30,6 +30,13 @@ export function ConsentBadge({ status, grantedTo, grantedAt }: ConsentBadgeProps
     }
   };
 
+  const formatDate = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${day}/${month}/${year}`;
+  };
+
   return (
     <div className={`inline-flex flex-col gap-1 px-3 py-2 rounded-lg border ${getStyle()}`}>
       <div className="flex items-center gap-2">
@@ -39,7 +46,7 @@ export function ConsentBadge({ status, grantedTo, grantedAt }: ConsentBadgeProps
       {grantedTo && status === 'granted' && (
         <div className="text-xs opacity-80">
           <div>To: {grantedTo}</div>
-          {grantedAt && <div>On: {grantedAt.toLocaleDateString()}</div>}
+          {grantedAt && <div>On: {formatDate(grantedAt)}</div>}
         </div>
       )}
     </div>

@@ -160,13 +160,26 @@ async function verifyGemini(vertexAI) {
     const result = await generativeModel.generateContent(testPrompt);
     const response = result.response;
 
-    if (response.candidates && response.candidates.length > 0) {
-      const text = response.candidates[0].content.parts[0].text || '';
-      logInfo(`   Gemini response: "${text.trim().substring(0, 100)}"`);
-      logInfo(`   Model: ${model}`);
-      logSuccess(CHECKS.gemini);
+    // Safely access nested response structure with null checks
+    const candidates = response?.candidates;
+    if (candidates && candidates.length > 0) {
+      const content = candidates[0]?.content;
+      const parts = content?.parts;
+      const text = parts && parts.length > 0 ? (parts[0]?.text || '') : '';
+      
+      if (text) {
+        logInfo(`   Gemini response: "${text.trim().substring(0, 100)}"`);
+        logInfo(`   Model: ${model}`);
+        logSuccess(CHECKS.gemini);
+      } else {
+        // Model responded but no text content (possible safety block or empty generation)
+        logInfo(`   Gemini connected but returned empty text. This may be normal for certain prompts.`);
+        logInfo(`   Model: ${model}`);
+        logInfo(`   Response structure present but no text generated.`);
+        logSuccess(CHECKS.gemini);
+      }
     } else {
-      throw new Error('Empty response from Gemini');
+      throw new Error('Empty response from Gemini - no candidates returned');
     }
   } catch (error) {
     logFailure(CHECKS.gemini, error);

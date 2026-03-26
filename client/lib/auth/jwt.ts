@@ -2,11 +2,41 @@
  * JWT Token Management
  * Handles JWT generation, verification, and refresh using jose library
  * Production-ready with proper error handling and security
+ * 
+ * NOTE: This module is Edge Runtime compatible - uses Web Crypto API
  */
 
 import * as jose from 'jose';
-import { randomUUID } from 'crypto';
 import type { JWTPayload, UserClaims, TokenPair, AuthConfig } from './types';
+
+/**
+ * Generate a UUID compatible with Edge Runtime
+ * Uses Web Crypto API which is available in both Node.js and Edge
+ */
+function generateUUID(): string {
+  // Use Web Crypto API (works in Edge Runtime)
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  
+  // Fallback for older environments
+  const bytes = new Uint8Array(16);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes);
+  } else {
+    // Last resort fallback
+    for (let i = 0; i < 16; i++) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  
+  // Set version (4) and variant bits
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  
+  const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 // Default configuration
 const DEFAULT_CONFIG: AuthConfig = {
@@ -78,7 +108,7 @@ async function generateToken(
     aud: config.audience,
     iat: now,
     exp: now + expirySeconds,
-    jti: randomUUID(),
+    jti: generateUUID(),
     type,
   };
 

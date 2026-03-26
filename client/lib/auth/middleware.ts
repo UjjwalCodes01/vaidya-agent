@@ -1,6 +1,8 @@
 /**
  * Authentication Middleware
  * Provides JWT-based authentication for API routes
+ * 
+ * NOTE: This module is Edge Runtime compatible
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -12,7 +14,7 @@ import {
   PUBLIC_ROUTES, 
   ADMIN_ROUTES 
 } from './types';
-import { AuthenticationError, AuthorizationError, errorResponse } from '../api-middleware';
+import { AuthenticationError, AuthorizationError, errorResponse } from '../api-middleware-edge';
 
 /**
  * Check if a path matches a route pattern

@@ -4,12 +4,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const NAV_ITEMS = [
-  { href: '/', label: 'Home', icon: '🏠' },
-  { href: '/triage', label: 'Triage', icon: '🤖' },
-  { href: '/records', label: 'Records', icon: '📋' },
-  { href: '/care-finder', label: 'Care', icon: '🏥' },
-  { href: '/guides', label: 'Guides', icon: '📚' },
-  { href: '/profile', label: 'Profile', icon: '👤' },
+  { href: '/', label: 'Home' },
+  { href: '/triage', label: 'Triage' },
+  { href: '/records', label: 'Records' },
+  { href: '/care-finder', label: 'Care' },
+  { href: '/guides', label: 'Guides' },
+  { href: '/profile', label: 'Profile' },
 ] as const;
 
 /**
@@ -20,9 +20,9 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800">
-      <div className="max-w-7xl mx-auto px-2">
-        <div className="flex justify-around items-center h-16 md:h-20">
+    <nav className="fixed bottom-4 left-0 right-0 z-40 px-4">
+      <div className="ui-shell mx-auto max-w-4xl rounded-[24px] px-2 py-2">
+        <div className="grid h-16 grid-cols-6 items-center gap-1 md:h-[72px]">
           {NAV_ITEMS.map((item) => {
             const isActive = pathname === item.href;
             
@@ -31,21 +31,17 @@ export function BottomNav() {
                 key={item.href}
                 href={item.href}
                 className={`
-                  flex flex-col items-center justify-center gap-1
-                  min-w-[64px] md:min-w-[80px] px-2 py-2
-                  rounded-lg transition-all duration-200
+                  flex h-full items-center justify-center
+                  rounded-2xl px-2 text-center transition-all duration-200
                   ${isActive 
-                    ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20' 
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                    ? 'bg-brand text-white shadow-[0_10px_24px_rgba(35,83,71,0.28)]'
+                    : 'text-muted hover:bg-black/3 dark:hover:bg-white/4'
                   }
-                  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+                  focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2
                 `}
                 aria-current={isActive ? 'page' : undefined}
               >
-                <span className="text-2xl md:text-3xl" role="img" aria-label={item.label}>
-                  {item.icon}
-                </span>
-                <span className={`text-xs md:text-sm font-medium ${isActive ? 'font-semibold' : ''}`}>
+                <span className={`text-[11px] font-semibold tracking-[0.16em] uppercase md:text-xs ${isActive ? 'text-white' : ''}`}>
                   {item.label}
                 </span>
               </Link>

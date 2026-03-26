@@ -27,7 +27,7 @@ export function VoiceWaveform({ isListening, isThinking = false }: VoiceWaveform
 
     const animate = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#3b82f6'; // blue-500
+      ctx.fillStyle = '#235347';
 
       for (let i = 0; i < bars; i++) {
         const height = Math.random() * canvas.height * 0.8 + canvas.height * 0.1;
@@ -48,7 +48,9 @@ export function VoiceWaveform({ isListening, isThinking = false }: VoiceWaveform
   if (isThinking) {
     return (
       <div className="flex items-center justify-center h-32">
-        <div className="w-24 h-24 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full animate-pulse shadow-lg" />
+        <div className="flex h-24 w-24 items-center justify-center rounded-full bg-brand-soft shadow-lg">
+          <div className="h-12 w-12 rounded-full bg-brand animate-pulse" />
+        </div>
       </div>
     );
   }
@@ -56,8 +58,8 @@ export function VoiceWaveform({ isListening, isThinking = false }: VoiceWaveform
   if (!isListening) {
     return (
       <div className="flex items-center justify-center h-32">
-        <div className="w-24 h-24 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center">
-          <span className="text-4xl">🎤</span>
+        <div className="flex h-24 w-24 items-center justify-center rounded-full border border-border bg-surface-strong">
+          <div className="h-4 w-4 rounded-full bg-muted" />
         </div>
       </div>
     );
