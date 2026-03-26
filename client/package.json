@@ -1,0 +1,51 @@
+{
+  "name": "client",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .next tsconfig.tsbuildinfo",
+    "verify:gcp": "node scripts/verify-gcp.js",
+    "validate:env": "node scripts/validate-env.js",
+    "validate:production": "npx tsx scripts/validate-production.ts",
+    "mcp": "npx tsx scripts/mcp-server.ts",
+    "prebuild": "npm run validate:env",
+    "prestart": "npm run validate:env"
+  },
+  "dependencies": {
+    "@google-cloud/aiplatform": "^6.5.0",
+    "@google-cloud/firestore": "^8.3.0",
+    "@google-cloud/secret-manager": "^6.1.1",
+    "@google-cloud/speech": "^7.3.0",
+    "@google-cloud/text-to-speech": "^6.4.0",
+    "@google-cloud/vertexai": "^1.10.2",
+    "@modelcontextprotocol/sdk": "^1.28.0",
+    "@types/ioredis": "^4.28.10",
+    "@types/jsonwebtoken": "^9.0.10",
+    "axios": "^1.13.6",
+    "dotenv": "^17.3.1",
+    "firebase-admin": "^13.7.0",
+    "google-auth-library": "^10.6.2",
+    "ioredis": "^5.10.1",
+    "jose": "^6.2.2",
+    "next": "16.2.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.1",
+    "tailwindcss": "^4",
+    "tsx": "^4.21.0",
+    "typescript": "^5"
+  }
+}
