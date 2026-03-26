@@ -26,6 +26,7 @@ export function getFirestore(): Firestore {
         client_email: credentials.client_email,
         private_key: credentials.private_key,
       },
+      ignoreUndefinedProperties: true, // Allow undefined fields
     });
   }
 

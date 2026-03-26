@@ -1,0 +1,12 @@
+# Sensitive files
+service-account.json
+*.key
+*.pem
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

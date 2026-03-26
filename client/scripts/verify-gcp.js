@@ -8,7 +8,8 @@
  * Usage: node scripts/verify-gcp.js
  */
 
-require('dotenv/config');
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env.local') });
 const { Firestore } = require('@google-cloud/firestore');
 const { VertexAI } = require('@google-cloud/vertexai');
 const { SpeechClient } = require('@google-cloud/speech');
