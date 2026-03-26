@@ -90,6 +90,8 @@ export const PUBLIC_ROUTES = [
   '/api/rag/search',
   '/api/voice/stt',
   '/api/voice/tts',
+  '/api/agent/triage',
+  '/api/agent/chat',
 ] as const;
 
 /** Admin-only routes */

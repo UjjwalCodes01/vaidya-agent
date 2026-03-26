@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { AppLayout } from '@/components/layout';
 import { VoiceWaveform, StatusCard, Button } from '@/components/shared';
 import { useToast } from '@/components/shared/Toast';
@@ -13,6 +13,13 @@ interface Message {
   timestamp: Date;
 }
 
+interface TriageResult {
+  severity: string;
+  suspectedConditions: string[];
+  recommendedAction: string;
+  reasoning: string;
+}
+
 export default function TriagePage() {
   const [isListening, setIsListening] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
@@ -20,75 +27,189 @@ export default function TriagePage() {
   const [agentStatus, setAgentStatus] = useState<'idle' | 'listening' | 'thinking' | 'responding'>('idle');
   const [messages, setMessages] = useState<Message[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [triageResult, setTriageResult] = useState<TriageResult | null>(null);
   const { showToast } = useToast();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
 
-  const handleMicClick = useCallback(() => {
-    if (isListening) {
-      setIsListening(false);
-      setIsThinking(true);
-      setAgentStatus('thinking');
-      showToast('Processing your symptoms...', 'info');
+  const callTriageAPI = useCallback(async (symptoms: string) => {
+    try {
+      const payload = {
+        symptoms,
+        sessionId: sessionId || undefined,
+      };
       
-      // Simulate processing and response
-      setTimeout(() => {
-        setIsThinking(false);
-        setAgentStatus('responding');
-        
-        // Add mock conversation
-        const userMessage: Message = {
-          id: `msg-${Date.now()}`,
-          role: 'user',
-          content: transcript || 'I have a headache and mild fever since yesterday.',
-          timestamp: new Date(),
-        };
-        
-        const assistantMessage: Message = {
-          id: `msg-${Date.now() + 1}`,
-          role: 'assistant',
-          content: 'Based on your symptoms of headache and mild fever, this could be a viral infection. I recommend rest, fluids, and monitoring your temperature. If fever exceeds 102°F or symptoms persist beyond 3 days, please visit a doctor.',
-          timestamp: new Date(),
-        };
-        
-        setMessages((prev) => [...prev, userMessage, assistantMessage]);
-        showToast('Analysis complete', 'success');
-      }, 2000);
-    } else {
-      setIsListening(true);
-      setAgentStatus('listening');
-      showToast('Listening... Speak your symptoms', 'info');
+      console.log('Sending triage request:', payload);
       
-      // In production: Initialize Web Speech API
-      // navigator.mediaDevices.getUserMedia({ audio: true })
+      const response = await fetch('/api/agent/triage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Triage API error response:', errorData);
+        const errorMessage = errorData.error?.message || 'Failed to analyze symptoms';
+        const errorDetails = errorData.error?.details ? `\n${JSON.stringify(errorData.error.details, null, 2)}` : '';
+        throw new Error(errorMessage + errorDetails);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Triage API error:', error);
+      throw error;
     }
-  }, [isListening, transcript, showToast]);
+  }, [sessionId]);
 
-  const handleTextSubmit = useCallback(() => {
-    if (!transcript.trim()) return;
-    
+  const processSymptoms = useCallback(async (symptoms: string) => {
+    setIsThinking(true);
     setAgentStatus('thinking');
-    showToast('Analyzing your symptoms...', 'info');
+    showToast('Analyzing your symptoms with Gemini AI...', 'info');
     
-    setTimeout(() => {
+    try {
       const userMessage: Message = {
         id: `msg-${Date.now()}`,
         role: 'user',
-        content: transcript,
+        content: symptoms,
         timestamp: new Date(),
       };
       
+      setMessages((prev) => [...prev, userMessage]);
+
+      const result = await callTriageAPI(symptoms);
+      
+      if (!sessionId && result.data?.sessionId) {
+        setSessionId(result.data.sessionId);
+      }
+
+      const triage = result.data?.triage;
+      setTriageResult(triage);
+
       const assistantMessage: Message = {
         id: `msg-${Date.now() + 1}`,
         role: 'assistant',
-        content: `I understand you&apos;re experiencing: "${transcript}". Based on this, I recommend consulting with a healthcare professional for proper diagnosis. Would you like me to find nearby facilities?`,
+        content: `Based on your symptoms, I've assessed the severity as **${triage.severity}**.\n\n**Suspected conditions:** ${triage.suspectedConditions.join(', ')}\n\n**Recommended action:** ${triage.recommendedAction}\n\n**Reasoning:** ${triage.reasoning}`,
         timestamp: new Date(),
       };
       
-      setMessages((prev) => [...prev, userMessage, assistantMessage]);
-      setTranscript('');
+      setMessages((prev) => [...prev, assistantMessage]);
       setAgentStatus('responding');
       showToast('Analysis complete', 'success');
-    }, 1500);
-  }, [transcript, showToast]);
+    } catch (error) {
+      console.error('Error processing symptoms:', error);
+      showToast('Failed to analyze symptoms. Please try again.', 'error');
+      setAgentStatus('idle');
+    } finally {
+      setIsThinking(false);
+    }
+  }, [sessionId, showToast, callTriageAPI]);
+
+  // Initialize Web Speech API
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'webkitSpeechRecognition' in window) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const SpeechRecognition = (window as any).webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-IN'; // Indian English, can be changed to 'hi-IN' for Hindi
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      recognition.onresult = (event: any) => {
+        let finalTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (result.isFinal) {
+            finalTranscript += result[0].transcript;
+          }
+        }
+        if (finalTranscript) {
+          setTranscript((prev) => prev + ' ' + finalTranscript);
+        }
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      recognition.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        
+        // Handle different error types with appropriate messages
+        switch (event.error) {
+          case 'network':
+            showToast('Speech recognition offline. Google speech service unreachable. Text input works perfectly! ✍️', 'warning');
+            break;
+          case 'not-allowed':
+          case 'permission-denied':
+            showToast('Microphone permission needed. Enable in browser or use text input below.', 'error');
+            break;
+          case 'no-speech':
+            showToast('No speech detected. Try speaking louder or use text input.', 'warning');
+            break;
+          case 'audio-capture':
+            showToast('Microphone not found. Use text input instead.', 'error');
+            break;
+          case 'aborted':
+            // User stopped - don't show error
+            break;
+          default:
+            showToast(`Speech unavailable (${event.error}). Text input works great!`, 'warning');
+        }
+        
+        setIsListening(false);
+        setAgentStatus('idle');
+      };
+
+      recognition.onend = () => {
+        if (isListening) {
+          recognition.start(); // Restart if still supposed to be listening
+        }
+      };
+
+      recognitionRef.current = recognition;
+    }
+  }, [isListening, showToast]);
+
+  const handleMicClick = useCallback(() => {
+    if (isListening) {
+      // Stop listening
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      setIsListening(false);
+      
+      // Process the transcript
+      if (transcript.trim()) {
+        processSymptoms(transcript.trim());
+      } else {
+        setAgentStatus('idle');
+        showToast('No speech detected', 'warning');
+      }
+    } else {
+      // Start listening
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+          setIsListening(true);
+          setAgentStatus('listening');
+          setTranscript('');
+          showToast('Listening... Speak your symptoms', 'info');
+        } catch (error) {
+          console.error('Failed to start speech recognition:', error);
+          showToast('Speech recognition not available. Please type your symptoms.', 'error');
+        }
+      } else {
+        showToast('Speech recognition not supported. Please type your symptoms.', 'error');
+      }
+    }
+  }, [isListening, transcript, showToast, processSymptoms]);
+
+  const handleTextSubmit = useCallback(() => {
+    if (!transcript.trim()) return;
+    processSymptoms(transcript.trim());
+    setTranscript('');
+  }, [transcript, processSymptoms]);
 
   return (
     <AppLayout>
@@ -104,7 +225,7 @@ export default function TriagePage() {
               <p className="text-sm text-[var(--muted)]">
                 {agentStatus === 'idle' && 'Tap the microphone to start'}
                 {agentStatus === 'listening' && "I'm listening to your symptoms..."}
-                {agentStatus === 'thinking' && 'Analyzing your symptoms...'}
+                {agentStatus === 'thinking' && 'Analyzing your symptoms with Gemini AI...'}
                 {agentStatus === 'responding' && "Here's what I found..."}
               </p>
             </div>
@@ -124,15 +245,25 @@ export default function TriagePage() {
             isThinking={isThinking}
           />
 
+          {/* Real-time Transcript Display */}
+          {transcript && (
+            <div className="mt-4 p-3 bg-[var(--brand-soft)] rounded-xl">
+              <p className="text-xs font-medium text-[var(--brand)] mb-1">Transcript:</p>
+              <p className="text-sm text-[var(--foreground)]">{transcript}</p>
+            </div>
+          )}
+
           {/* Microphone Button */}
-          <div className="flex justify-center mt-8">
+          <div className="flex flex-col items-center mt-8 gap-3">
             <button
               onClick={handleMicClick}
+              disabled={isThinking}
               className={`
                 w-20 h-20 rounded-full shadow-lg
                 flex items-center justify-center text-white
                 transition-all duration-200
                 focus:outline-none focus:ring-4
+                disabled:opacity-50 disabled:cursor-not-allowed
                 ${isListening 
                   ? 'bg-[var(--danger)] hover:brightness-95 focus:ring-[var(--danger)]/30 scale-110' 
                   : 'bg-[var(--brand)] hover:brightness-95 focus:ring-[var(--brand)]/30 hover:scale-110'
@@ -144,19 +275,23 @@ export default function TriagePage() {
                 {isListening ? 'Stop' : 'Speak'}
               </span>
             </button>
+            <p className="text-xs text-[var(--muted)] text-center max-w-sm">
+              Speech requires Google servers. If offline, text input works great! 📝
+            </p>
           </div>
 
           {/* Text Input Fallback */}
           <div className="mt-6 flex gap-2">
             <input
               type="text"
-              placeholder="Or type your symptoms here..."
+              placeholder="Type your symptoms here (works offline)..."
               value={transcript}
               onChange={(e) => setTranscript(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleTextSubmit()}
-              className="flex-1 rounded-[20px] border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-3 text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]"
+              disabled={isThinking}
+              className="flex-1 rounded-[20px] border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-3 text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)] disabled:opacity-50"
             />
-            <Button onClick={handleTextSubmit} disabled={!transcript.trim()}>
+            <Button onClick={handleTextSubmit} disabled={!transcript.trim() || isThinking}>
               Send
             </Button>
           </div>
@@ -181,34 +316,66 @@ export default function TriagePage() {
                   <p className="text-xs font-medium text-[var(--muted)] mb-1">
                     {msg.role === 'user' ? 'You' : 'Vaidya'}
                   </p>
-                  <p className="text-sm text-[var(--foreground)]">{msg.content}</p>
+                  <p className="text-sm text-[var(--foreground)] whitespace-pre-line">{msg.content}</p>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* AI Interpretation (Mock) */}
-        <StatusCard
-          title="Symptom Analysis"
-          icon="🩺"
-          status={messages.length > 0 ? 'success' : 'info'}
-        >
-          <div className="space-y-2">
-            <div>
-              <span className="text-sm font-medium text-[var(--foreground)]">Detected Symptoms:</span>
+        {/* AI Interpretation (Real Gemini Results) */}
+        {triageResult && (
+          <StatusCard
+            title="Symptom Analysis"
+            icon="🩺"
+            status={
+              triageResult.severity === 'critical' ? 'error' :
+              triageResult.severity === 'high' ? 'warning' :
+              triageResult.severity === 'moderate' ? 'warning' :
+              'success'
+            }
+          >
+            <div className="space-y-2">
+              <div>
+                <span className="text-sm font-medium text-[var(--foreground)]">Severity:</span>
+                <p className={`text-sm font-semibold ${
+                  triageResult.severity === 'critical' ? 'text-[var(--danger)]' :
+                  triageResult.severity === 'high' ? 'text-[var(--accent)]' :
+                  triageResult.severity === 'moderate' ? 'text-[var(--accent)]' :
+                  'text-[var(--brand)]'
+                }`}>
+                  {triageResult.severity.toUpperCase()}
+                </p>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-[var(--foreground)]">Suspected Conditions:</span>
+                <p className="text-sm text-[var(--muted)]">
+                  {triageResult.suspectedConditions.join(', ')}
+                </p>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-[var(--foreground)]">Recommended Action:</span>
+                <p className="text-sm text-[var(--muted)]">
+                  {triageResult.recommendedAction}
+                </p>
+              </div>
+            </div>
+          </StatusCard>
+        )}
+
+        {!triageResult && (
+          <StatusCard
+            title="Symptom Analysis"
+            icon="🩺"
+            status="info"
+          >
+            <div className="space-y-2">
               <p className="text-sm text-[var(--muted)]">
-                {messages.length > 0 ? 'Headache, mild fever' : 'None yet - start talking to Vaidya'}
+                Start talking to Vaidya to analyze your symptoms using Gemini AI
               </p>
             </div>
-            <div>
-              <span className="text-sm font-medium text-[var(--foreground)]">Urgency Level:</span>
-              <p className={`text-sm ${messages.length > 0 ? 'text-[var(--accent)] font-medium' : 'text-[var(--muted)]'}`}>
-                {messages.length > 0 ? 'Low - Self-care recommended' : 'To be determined'}
-              </p>
-            </div>
-          </div>
-        </StatusCard>
+          </StatusCard>
+        )}
 
         {/* Suggested Actions */}
         <div>
@@ -258,7 +425,7 @@ export default function TriagePage() {
                         {msg.timestamp.toLocaleTimeString()}
                       </span>
                     </div>
-                    <p className="text-[var(--foreground)]">{msg.content}</p>
+                    <p className="text-[var(--foreground)] whitespace-pre-line">{msg.content}</p>
                   </div>
                 ))}
               </div>
