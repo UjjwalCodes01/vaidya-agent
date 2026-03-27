@@ -2,11 +2,65 @@
 
 import { StatusCard } from '@/components/shared';
 import Link from 'next/link';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { useState, useEffect } from 'react';
+
+interface LastTriage {
+  sessionId: string;
+  timestamp: string;
+  severity: string;
+  suspectedConditions: string[];
+}
+
+interface HealthAlert {
+  id: string;
+  title: string;
+  description: string;
+  topic: string;
+  priority: 'high' | 'medium' | 'low';
+}
 
 /**
  * Home Page Features
  */
 export function HomeFeatures() {
+  const { user, isLoading: authLoading } = useAuth();
+  const [lastTriage, setLastTriage] = useState<LastTriage | null>(null);
+  const [healthAlert, setHealthAlert] = useState<HealthAlert | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch last triage session and health alerts
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch RAG guidelines for health alerts
+        const guidelinesRes = await fetch('/api/rag/guidelines?category=emergency');
+        if (guidelinesRes.ok) {
+          const guidelinesData = await guidelinesRes.json();
+          if (guidelinesData.success && guidelinesData.data?.guidelines?.length > 0) {
+            const alert = guidelinesData.data.guidelines[0];
+            setHealthAlert({
+              id: alert.id,
+              title: alert.condition || 'Health Advisory',
+              description: alert.description?.substring(0, 100) + '...' || 'Stay safe and healthy.',
+              topic: alert.condition?.toLowerCase().replace(/\s+/g, '-') || 'health',
+              priority: alert.category === 'emergency' ? 'high' : 'medium',
+            });
+          }
+        }
+      } catch (error) {
+        console.error('[Home] Error fetching data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Determine ABHA status
+  const abhaLinked = user?.abhaLinked || false;
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
       {/* Welcome Section */}
@@ -15,7 +69,7 @@ export function HomeFeatures() {
         <div className="grid gap-6 md:grid-cols-[1.4fr_0.8fr] md:items-end">
           <div>
             <h2 className="section-title mb-3">
-              A calmer, clearer way to start healthcare triage.
+              {user?.name ? `Welcome back, ${user.name.split(' ')[0]}` : 'A calmer, clearer way to start healthcare triage.'}
             </h2>
             <p className="muted-copy max-w-2xl text-base md:text-lg">
               Talk to Vaidya, review your records, and move to the right care option without navigating a cluttered system.
@@ -42,7 +96,7 @@ export function HomeFeatures() {
           </div>
           <div className="hidden min-w-[150px] rounded-[28px] border border-white/15 bg-white/10 px-5 py-5 md:block">
             <p className="text-sm text-white/70">Response mode</p>
-            <p className="mt-2 text-xl font-semibold">Hindi + English</p>
+            <p className="mt-2 text-xl font-semibold">{user?.language || 'Hindi + English'}</p>
           </div>
         </div>
       </Link>
@@ -52,27 +106,47 @@ export function HomeFeatures() {
         <StatusCard
           title="Last Triage"
           icon="LT"
-          status="info"
+          status={lastTriage ? 'success' : 'info'}
           action={{
-            label: 'View Details',
-            onClick: () => (window.location.href = '/records')
+            label: lastTriage ? 'View Details' : 'Start Triage',
+            onClick: () => (window.location.href = lastTriage ? '/records' : '/triage')
           }}
         >
-          <p className="text-sm">No recent triage sessions</p>
-          <p className="text-xs text-[var(--muted)] mt-1">Start your first consultation</p>
+          {lastTriage ? (
+            <>
+              <p className="text-sm capitalize">{lastTriage.severity} severity</p>
+              <p className="text-xs text-[var(--muted)] mt-1">
+                {lastTriage.suspectedConditions?.slice(0, 2).join(', ')}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm">No recent triage sessions</p>
+              <p className="text-xs text-[var(--muted)] mt-1">Start your first consultation</p>
+            </>
+          )}
         </StatusCard>
 
         <StatusCard
           title="ABHA Status"
           icon="AB"
-          status="warning"
+          status={abhaLinked ? 'success' : 'warning'}
           action={{
-            label: 'Link ABHA',
+            label: abhaLinked ? 'View Profile' : 'Link ABHA',
             onClick: () => (window.location.href = '/profile')
           }}
         >
-          <p className="text-sm">Not linked</p>
-          <p className="text-xs text-[var(--muted)] mt-1">Link your ABHA for seamless health records</p>
+          {abhaLinked ? (
+            <>
+              <p className="text-sm">Linked ✓</p>
+              <p className="text-xs text-[var(--muted)] mt-1">{user?.abhaAddress || 'Connected to ABDM'}</p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm">Not linked</p>
+              <p className="text-xs text-[var(--muted)] mt-1">Link your ABHA for seamless health records</p>
+            </>
+          )}
         </StatusCard>
       </div>
 
@@ -82,9 +156,9 @@ export function HomeFeatures() {
           Quick Actions
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <QuickActionCard href="/records" label="View Records" />
-          <QuickActionCard href="/care-finder" label="Find Hospital" />
-          <QuickActionCard href="/guides" label="Health Guides" />
+          <QuickActionCard href="/records" label="View Records" icon="📋" />
+          <QuickActionCard href="/care-finder" label="Find Hospital" icon="🏥" />
+          <QuickActionCard href="/guides" label="Health Guides" icon="📚" />
         </div>
       </div>
 
@@ -94,13 +168,13 @@ export function HomeFeatures() {
           <div>
             <p className="eyebrow mb-2">Local alert</p>
             <h4 className="font-semibold text-[var(--foreground)] mb-1">
-              This Week in Your Region
+              {healthAlert?.title || 'This Week in Your Region'}
             </h4>
             <p className="text-sm text-[var(--muted)]">
-              Dengue cases increasing. Stay hydrated and use mosquito repellent.
+              {healthAlert?.description || 'Dengue cases increasing. Stay hydrated and use mosquito repellent.'}
             </p>
-            <Link 
-              href="/guides?topic=dengue" 
+            <Link
+              href={`/guides?topic=${healthAlert?.topic || 'dengue'}`}
               className="mt-3 inline-block text-sm font-medium text-[var(--brand)] hover:underline"
             >
               Learn more
@@ -112,14 +186,15 @@ export function HomeFeatures() {
   );
 }
 
-function QuickActionCard({ href, label }: { href: string; label: string }) {
+function QuickActionCard({ href, label, icon }: { href: string; label: string; icon?: string }) {
   return (
     <Link
       href={href}
-      className="ui-section rounded-[24px] p-5 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/50"
+      className="ui-section rounded-[24px] p-5 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/50 flex flex-col items-center text-center"
     >
-      <span className="eyebrow mb-2 block">Quick action</span>
-      <span className="text-base font-semibold text-[var(--foreground)] text-center">
+      {icon && <span className="text-2xl mb-2">{icon}</span>}
+      <span className="eyebrow mb-1 block">Quick action</span>
+      <span className="text-base font-semibold text-[var(--foreground)]">
         {label}
       </span>
     </Link>

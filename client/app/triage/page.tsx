@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { AppLayout } from '@/components/layout';
 import { VoiceWaveform, StatusCard, Button } from '@/components/shared';
 import { useToast } from '@/components/shared/Toast';
+import { useRAG, type SearchResult } from '@/lib/hooks/useRAG';
 import Link from 'next/link';
 
 interface Message {
@@ -20,6 +21,21 @@ interface TriageResult {
   reasoning: string;
 }
 
+// Supported Indian languages
+const LANGUAGES = [
+  { code: 'hi-IN', name: 'Hindi', nativeName: 'हिंदी' },
+  { code: 'en-IN', name: 'English', nativeName: 'English' },
+  { code: 'bn-IN', name: 'Bengali', nativeName: 'বাংলা' },
+  { code: 'te-IN', name: 'Telugu', nativeName: 'తెలుగు' },
+  { code: 'mr-IN', name: 'Marathi', nativeName: 'मराठी' },
+  { code: 'ta-IN', name: 'Tamil', nativeName: 'தமிழ்' },
+  { code: 'gu-IN', name: 'Gujarati', nativeName: 'ગુજરાતી' },
+  { code: 'kn-IN', name: 'Kannada', nativeName: 'ಕನ್ನಡ' },
+  { code: 'ml-IN', name: 'Malayalam', nativeName: 'മലയാളം' },
+  { code: 'pa-IN', name: 'Punjabi', nativeName: 'ਪੰਜਾਬੀ' },
+  { code: 'or-IN', name: 'Odia', nativeName: 'ଓଡ଼ିଆ' },
+];
+
 export default function TriagePage() {
   const [isListening, setIsListening] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
@@ -29,9 +45,15 @@ export default function TriagePage() {
   const [showHistory, setShowHistory] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [triageResult, setTriageResult] = useState<TriageResult | null>(null);
+  const [selectedLanguage, setSelectedLanguage] = useState('hi-IN');
+  const [useServerVoice, setUseServerVoice] = useState(false);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [relatedGuides, setRelatedGuides] = useState<SearchResult[]>([]);
   const { showToast } = useToast();
+  const { getRelatedGuidelines } = useRAG();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const callTriageAPI = useCallback(async (symptoms: string) => {
     try {
@@ -64,11 +86,43 @@ export default function TriagePage() {
     }
   }, [sessionId]);
 
+  // Play TTS audio response
+  const playTTSResponse = useCallback(async (text: string) => {
+    if (!useServerVoice) return;
+
+    try {
+      setIsPlayingAudio(true);
+      const response = await fetch('/api/voice/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          languageCode: selectedLanguage,
+          voiceName: `${selectedLanguage}-Wavenet-A`,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data?.audioContent) {
+          const audio = new Audio(`data:audio/mp3;base64,${data.data.audioContent}`);
+          audioRef.current = audio;
+          audio.onended = () => setIsPlayingAudio(false);
+          audio.onerror = () => setIsPlayingAudio(false);
+          await audio.play();
+        }
+      }
+    } catch (error) {
+      console.error('[TTS] Error:', error);
+      setIsPlayingAudio(false);
+    }
+  }, [useServerVoice, selectedLanguage]);
+
   const processSymptoms = useCallback(async (symptoms: string) => {
     setIsThinking(true);
     setAgentStatus('thinking');
     showToast('Analyzing your symptoms with Gemini AI...', 'info');
-    
+
     try {
       const userMessage: Message = {
         id: `msg-${Date.now()}`,
@@ -76,11 +130,11 @@ export default function TriagePage() {
         content: symptoms,
         timestamp: new Date(),
       };
-      
+
       setMessages((prev) => [...prev, userMessage]);
 
       const result = await callTriageAPI(symptoms);
-      
+
       if (!sessionId && result.data?.sessionId) {
         setSessionId(result.data.sessionId);
       }
@@ -88,16 +142,22 @@ export default function TriagePage() {
       const triage = result.data?.triage;
       setTriageResult(triage);
 
+      const responseText = `Based on your symptoms, the severity is ${triage.severity}. ${triage.recommendedAction}`;
       const assistantMessage: Message = {
         id: `msg-${Date.now() + 1}`,
         role: 'assistant',
         content: `Based on your symptoms, I've assessed the severity as **${triage.severity}**.\n\n**Suspected conditions:** ${triage.suspectedConditions.join(', ')}\n\n**Recommended action:** ${triage.recommendedAction}\n\n**Reasoning:** ${triage.reasoning}`,
         timestamp: new Date(),
       };
-      
+
       setMessages((prev) => [...prev, assistantMessage]);
       setAgentStatus('responding');
       showToast('Analysis complete', 'success');
+
+      // Play TTS response
+      if (useServerVoice) {
+        await playTTSResponse(responseText);
+      }
     } catch (error) {
       console.error('Error processing symptoms:', error);
       showToast('Failed to analyze symptoms. Please try again.', 'error');
@@ -105,7 +165,20 @@ export default function TriagePage() {
     } finally {
       setIsThinking(false);
     }
-  }, [sessionId, showToast, callTriageAPI]);
+  }, [sessionId, showToast, callTriageAPI, useServerVoice, playTTSResponse]);
+
+  // Fetch related guides when triage result is available
+  useEffect(() => {
+    const conditions = triageResult?.suspectedConditions;
+    if (conditions && conditions.length > 0) {
+      const fetchRelatedGuides = async () => {
+        const condition = conditions[0];
+        const guides = await getRelatedGuidelines(condition, 3);
+        setRelatedGuides(guides);
+      };
+      fetchRelatedGuides();
+    }
+  }, [triageResult, getRelatedGuidelines]);
 
   // Initialize Web Speech API
   useEffect(() => {
@@ -115,7 +188,7 @@ export default function TriagePage() {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
-      recognition.lang = 'en-IN'; // Indian English, can be changed to 'hi-IN' for Hindi
+      recognition.lang = selectedLanguage; // Use selected Indian language
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       recognition.onresult = (event: any) => {
@@ -169,7 +242,7 @@ export default function TriagePage() {
 
       recognitionRef.current = recognition;
     }
-  }, [isListening, showToast]);
+  }, [isListening, showToast, selectedLanguage]);
 
   const handleMicClick = useCallback(() => {
     if (isListening) {
@@ -236,6 +309,38 @@ export default function TriagePage() {
               'bg-[var(--muted)]/30'
             }`} />
           </div>
+        </div>
+
+        {/* Language & Voice Settings */}
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="flex-1 min-w-[200px]">
+            <label className="text-xs text-[var(--muted)] mb-1 block">Language</label>
+            <select
+              value={selectedLanguage}
+              onChange={(e) => setSelectedLanguage(e.target.value)}
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]"
+            >
+              {LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.nativeName} ({lang.name})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useServerVoice}
+                onChange={(e) => setUseServerVoice(e.target.checked)}
+                className="h-4 w-4 rounded border-[var(--border)] text-[var(--brand)] focus:ring-[var(--brand)]"
+              />
+              <span className="text-sm text-[var(--foreground)]">🔊 Speak responses</span>
+            </label>
+          </div>
+          {isPlayingAudio && (
+            <span className="text-xs text-[var(--brand)] animate-pulse">🔊 Playing...</span>
+          )}
         </div>
 
         {/* Voice Interaction Area */}
@@ -361,6 +466,46 @@ export default function TriagePage() {
               </div>
             </div>
           </StatusCard>
+        )}
+
+        {/* Related Health Guides */}
+        {triageResult && relatedGuides.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-lg font-semibold text-[var(--foreground)]">
+              Related Health Guides
+            </h3>
+            <div className="grid grid-cols-1 gap-3">
+              {relatedGuides.map((result) => (
+                <Link
+                  key={result.guideline.id}
+                  href={`/guides?search=${encodeURIComponent(result.guideline.condition)}`}
+                  className="ui-section rounded-[20px] p-4 hover:-translate-y-0.5 transition-transform"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h4 className="font-medium text-[var(--foreground)]">{result.guideline.condition}</h4>
+                      <p className="text-sm text-[var(--muted)] mt-1">
+                        {result.guideline.symptoms?.slice(0, 2).join(' • ')}
+                      </p>
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      result.guideline.severity === 'severe' || result.guideline.severity === 'emergency'
+                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                        : 'bg-[var(--brand-soft)] text-[var(--brand)]'
+                    }`}>
+                      {result.guideline.severity}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2 text-xs text-[var(--brand)]">
+                    <span>Read full guide →</span>
+                    <span className="text-[var(--muted)]">
+                      {Math.round(result.similarity * 100)}% match
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
         )}
 
         {!triageResult && (

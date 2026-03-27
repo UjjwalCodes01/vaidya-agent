@@ -3,36 +3,76 @@
 import { AppLayout } from '@/components/layout';
 import { Button } from '@/components/shared';
 import { useToast } from '@/components/shared/Toast';
-import { useState } from 'react';
+import { useLocation, type Facility } from '@/lib/hooks/useLocation';
+import { BookingModal } from '@/components/features/care-finder/BookingModal';
+import { useState, useEffect } from 'react';
 
 export default function CareFinderPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [emergencyMode, setEmergencyMode] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'hospital' | 'phc' | 'specialist' | 'diagnostic'>('all');
+  const [bookingFacility, setBookingFacility] = useState<{ name: string; id?: string } | null>(null);
   const { showToast } = useToast();
+  const { position, loading, error, facilities, searchNearbyFacilities, getDirections, clearError } = useLocation();
 
-  const handleNavigate = (facilityName: string, emergency?: boolean) => {
+  // Fetch facilities when position is available or filter changes
+  useEffect(() => {
+    if (position) {
+      const facilityType = activeFilter === 'all' ? undefined :
+                          activeFilter === 'specialist' ? 'clinic' : activeFilter;
+
+      searchNearbyFacilities({
+        latitude: position.latitude,
+        longitude: position.longitude,
+        radius: emergencyMode ? 3000 : 10000, // 3km for emergency, 10km normal
+        type: facilityType as any,
+        emergency: emergencyMode,
+      });
+    }
+  }, [position, activeFilter, emergencyMode, searchNearbyFacilities]);
+
+  // Show error toast
+  useEffect(() => {
+    if (error) {
+      showToast(error, 'error');
+      clearError();
+    }
+  }, [error, showToast, clearError]);
+
+  const handleNavigate = async (facility: Facility, emergency?: boolean) => {
     if (emergency) {
-      showToast(`Finding fastest route to ${facilityName}...`, 'warning');
-      // In production: Use Google Maps Directions API
-      window.open(`https://www.google.com/maps/search/${encodeURIComponent(facilityName)}`, '_blank');
+      showToast(`Finding fastest route to ${facility.name}...`, 'warning');
     } else {
-      showToast(`Opening directions to ${facilityName}`, 'info');
-      window.open(`https://www.google.com/maps/search/${encodeURIComponent(facilityName)}`, '_blank');
+      showToast(`Opening directions to ${facility.name}`, 'info');
+    }
+
+    // Try to use our directions API first
+    const directionsUrl = await getDirections({
+      latitude: facility.location.latitude,
+      longitude: facility.location.longitude,
+    });
+
+    if (directionsUrl) {
+      window.open(directionsUrl, '_blank');
+    } else {
+      // Fallback to Google Maps search
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${facility.location.latitude},${facility.location.longitude}`, '_blank');
     }
   };
 
-  const handleBookUHI = (facilityName: string) => {
-    showToast(`Initiating UHI booking for ${facilityName}...`, 'info');
-    // In production: Call UHI API endpoint
-    setTimeout(() => {
-      showToast('UHI booking feature coming soon!', 'warning');
-    }, 1500);
+  const handleBookUHI = (facility: Facility) => {
+    setBookingFacility({ name: facility.name, id: facility.id });
   };
 
   const handleSort = () => {
-    showToast('Sorting facilities by distance...', 'info');
+    showToast('Facilities are sorted by distance', 'info');
   };
+
+  // Filter facilities by search query
+  const filteredFacilities = facilities.filter(f =>
+    f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    f.type.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <AppLayout>
@@ -85,16 +125,34 @@ export default function CareFinderPage() {
 
         {/* Map View */}
         <div className="flex-1 bg-[var(--brand-soft)] relative">
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-[var(--muted)] p-4">
-            <div className="w-16 h-16 mb-4 rounded-full bg-[var(--brand)]/10 flex items-center justify-center">
-              <span className="text-3xl">📍</span>
+          {loading && !position ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-[var(--muted)] p-4">
+              <div className="w-16 h-16 mb-4 rounded-full bg-[var(--brand)]/10 flex items-center justify-center animate-pulse">
+                <span className="text-3xl">📍</span>
+              </div>
+              <p className="text-lg font-semibold mb-2 text-[var(--foreground)]">Getting your location...</p>
+              <p className="text-sm text-center">Please allow location access to find nearby facilities</p>
             </div>
-            <p className="text-lg font-semibold mb-2 text-[var(--foreground)]">Map View</p>
-            <p className="text-sm text-center">Interactive map with facility locations</p>
-            <p className="text-xs text-center mt-2 max-w-md">
-              Shows nearby facilities with pins, distance, and real-time navigation
-            </p>
-          </div>
+          ) : position ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-[var(--muted)] p-4">
+              <div className="w-16 h-16 mb-4 rounded-full bg-[var(--brand)]/10 flex items-center justify-center">
+                <span className="text-3xl">🗺️</span>
+              </div>
+              <p className="text-lg font-semibold mb-2 text-[var(--foreground)]">Interactive Map</p>
+              <p className="text-sm text-center">Showing {filteredFacilities.length} facilities near you</p>
+              <p className="text-xs text-center mt-2 max-w-md text-[var(--muted)]">
+                📍 Your location: {position.latitude.toFixed(4)}°N, {position.longitude.toFixed(4)}°E
+              </p>
+            </div>
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-[var(--muted)] p-4">
+              <div className="w-16 h-16 mb-4 rounded-full bg-[var(--danger)]/10 flex items-center justify-center">
+                <span className="text-3xl">⚠️</span>
+              </div>
+              <p className="text-lg font-semibold mb-2 text-[var(--foreground)]">Location Unavailable</p>
+              <p className="text-sm text-center">Please enable location access to find nearby facilities</p>
+            </div>
+          )}
         </div>
 
         {/* Facility Cards (Scrollable Bottom Sheet) */}
@@ -102,66 +160,47 @@ export default function CareFinderPage() {
           <div className="p-4 space-y-3">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-[var(--foreground)]">
-                Nearby Facilities ({emergencyMode ? 'Emergency' : '12 results'})
+                Nearby Facilities ({emergencyMode ? 'Emergency mode' : `${filteredFacilities.length} results`})
               </h3>
-              <button 
+              <button
                 onClick={handleSort}
                 className="text-sm text-[var(--brand)] hover:underline"
               >
-                Sort by distance
+                Sorted by distance
               </button>
             </div>
 
-            <FacilityCard 
-              name="Apollo Hospital"
-              type="Multi-specialty Hospital"
-              distance="2.5 km"
-              waitTime="20 min"
-              available={true}
-              rating={4.5}
-              emergency={emergencyMode}
-              onNavigate={handleNavigate}
-              onBook={handleBookUHI}
-            />
-            
-            <FacilityCard 
-              name="Max Super Speciality Hospital"
-              type="Super Specialty Hospital"
-              distance="3.2 km"
-              waitTime="35 min"
-              available={true}
-              rating={4.7}
-              emergency={emergencyMode}
-              onNavigate={handleNavigate}
-              onBook={handleBookUHI}
-            />
-            
-            <FacilityCard 
-              name="Government PHC Sector 15"
-              type="Primary Health Center"
-              distance="1.8 km"
-              waitTime="15 min"
-              available={true}
-              rating={3.9}
-              emergency={emergencyMode}
-              onNavigate={handleNavigate}
-              onBook={handleBookUHI}
-            />
-            
-            <FacilityCard 
-              name="Fortis Hospital"
-              type="Multi-specialty Hospital"
-              distance="4.5 km"
-              waitTime="45 min"
-              available={false}
-              rating={4.6}
-              emergency={emergencyMode}
-              onNavigate={handleNavigate}
-              onBook={handleBookUHI}
-            />
+            {loading && facilities.length === 0 ? (
+              <div className="text-center py-8 text-[var(--muted)]">
+                <div className="animate-pulse">Loading facilities...</div>
+              </div>
+            ) : filteredFacilities.length === 0 ? (
+              <div className="text-center py-8 text-[var(--muted)]">
+                <p>No facilities found nearby.</p>
+                <p className="text-sm mt-2">Try adjusting your filters or search query.</p>
+              </div>
+            ) : (
+              filteredFacilities.map((facility) => (
+                <FacilityCard
+                  key={facility.id}
+                  facility={facility}
+                  emergency={emergencyMode}
+                  onNavigate={handleNavigate}
+                  onBook={handleBookUHI}
+                />
+              ))
+            )}
           </div>
         </div>
       </div>
+
+      {/* UHI Booking Modal */}
+      <BookingModal
+        isOpen={!!bookingFacility}
+        onClose={() => setBookingFacility(null)}
+        facilityName={bookingFacility?.name || ''}
+        facilityId={bookingFacility?.id}
+      />
     </AppLayout>
   );
 }
@@ -188,82 +227,97 @@ function FilterButton({ label, active, onClick }: {
   );
 }
 
-function FacilityCard({ 
-  name, 
-  type, 
-  distance, 
-  waitTime, 
-  available, 
-  rating,
+function FacilityCard({
+  facility,
   emergency,
   onNavigate,
   onBook
-}: { 
-  name: string;
-  type: string;
-  distance: string;
-  waitTime: string;
-  available: boolean;
-  rating: number;
+}: {
+  facility: Facility;
   emergency?: boolean;
-  onNavigate: (name: string, emergency?: boolean) => void;
-  onBook: (name: string) => void;
+  onNavigate: (facility: Facility, emergency?: boolean) => void;
+  onBook: (facility: Facility) => void;
 }) {
+  // Format distance
+  const formatDistance = (meters?: number): string => {
+    if (!meters) return 'Unknown';
+    if (meters < 1000) return `${Math.round(meters)}m`;
+    return `${(meters / 1000).toFixed(1)}km`;
+  };
+
+  // Get type display name
+  const getTypeDisplayName = (type: string): string => {
+    const typeMap: Record<string, string> = {
+      'hospital': 'Hospital',
+      'clinic': 'Specialist Clinic',
+      'phc': 'Primary Health Center',
+      'pharmacy': 'Pharmacy',
+      'diagnostic': 'Diagnostic Center',
+    };
+    return typeMap[type] || type;
+  };
+
   return (
     <div className={`
-      bg-[var(--surface-strong)] border rounded-xl p-4 
+      bg-[var(--surface-strong)] border rounded-xl p-4
       transition-all hover:shadow-md
       ${emergency ? 'border-[var(--danger)]' : 'border-[var(--border)]'}
     `}>
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1">
-          <h4 className="font-semibold text-[var(--foreground)] mb-1">{name}</h4>
-          <p className="text-sm text-[var(--muted)]">{type}</p>
+          <h4 className="font-semibold text-[var(--foreground)] mb-1">{facility.name}</h4>
+          <p className="text-sm text-[var(--muted)]">{getTypeDisplayName(facility.type)}</p>
         </div>
-        <div className="flex items-center gap-1 text-sm">
-          <span className="text-amber-500">★</span>
-          <span className="font-medium text-[var(--foreground)]">{rating.toFixed(1)}</span>
-        </div>
+        {facility.rating && (
+          <div className="flex items-center gap-1 text-sm">
+            <span className="text-amber-500">★</span>
+            <span className="font-medium text-[var(--foreground)]">{facility.rating.toFixed(1)}</span>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-4 text-sm text-[var(--muted)] mb-3">
         <div className="flex items-center gap-1">
           <span>📍</span>
-          <span>{distance}</span>
+          <span>{formatDistance(facility.distance)}</span>
         </div>
-        <div className="flex items-center gap-1">
-          <span>⏱️</span>
-          <span>{waitTime} wait</span>
-        </div>
-        <div className={`flex items-center gap-1 font-medium ${available ? 'text-[var(--brand)]' : 'text-[var(--danger)]'}`}>
-          <span>{available ? '✓ Available' : '✕ Full'}</span>
-        </div>
+        {facility.waitTime && (
+          <div className="flex items-center gap-1">
+            <span>⏱️</span>
+            <span>{facility.waitTime} wait</span>
+          </div>
+        )}
+        {facility.available !== undefined && (
+          <div className={`flex items-center gap-1 font-medium ${facility.available ? 'text-[var(--brand)]' : 'text-[var(--danger)]'}`}>
+            <span>{facility.available ? '✓ Available' : '✕ Full'}</span>
+          </div>
+        )}
       </div>
 
       <div className="flex gap-2">
         {emergency ? (
-          <Button 
-            variant="danger" 
+          <Button
+            variant="danger"
             fullWidth
-            onClick={() => onNavigate(name, true)}
+            onClick={() => onNavigate(facility, true)}
             icon={<span>🚨</span>}
           >
             Navigate Now
           </Button>
         ) : (
           <>
-            <Button 
-              variant="primary" 
+            <Button
+              variant="primary"
               className="flex-1"
-              onClick={() => onNavigate(name)}
+              onClick={() => onNavigate(facility)}
               icon={<span>🧭</span>}
             >
               Navigate
             </Button>
-            <Button 
-              variant="secondary" 
+            <Button
+              variant="secondary"
               className="flex-1"
-              onClick={() => onBook(name)}
+              onClick={() => onBook(facility)}
             >
               Book via UHI
             </Button>

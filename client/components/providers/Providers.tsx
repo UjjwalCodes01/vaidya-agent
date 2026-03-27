@@ -1,6 +1,7 @@
 'use client';
 
 import { ToastProvider } from '@/components/shared/Toast';
+import { AuthProvider } from '@/lib/context/AuthContext';
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -12,8 +13,10 @@ interface ProvidersProps {
  */
 export function Providers({ children }: ProvidersProps) {
   return (
-    <ToastProvider>
-      {children}
-    </ToastProvider>
+    <AuthProvider>
+      <ToastProvider>
+        {children}
+      </ToastProvider>
+    </AuthProvider>
   );
 }

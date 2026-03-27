@@ -5,20 +5,43 @@ import { Button } from '@/components/shared';
 import { useToast } from '@/components/shared/Toast';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 export default function ProfilePage() {
   const { showToast } = useToast();
   const router = useRouter();
+  const { user, logout, linkABHA, updatePreferences } = useAuth();
+  const [isLinkingABHA, setIsLinkingABHA] = useState(false);
+  const [abhaInput, setAbhaInput] = useState('');
+  const [showABHADialog, setShowABHADialog] = useState(false);
 
   const handleEditProfile = () => {
     showToast('Opening profile editor...', 'info');
   };
 
-  const handleLinkABHA = () => {
-    showToast('Redirecting to ABDM portal...', 'info');
-    setTimeout(() => {
-      showToast('ABHA linking requires OTP verification', 'warning');
-    }, 1500);
+  const handleLinkABHA = async () => {
+    if (!abhaInput.trim()) {
+      showToast('Please enter your ABHA address', 'error');
+      return;
+    }
+
+    setIsLinkingABHA(true);
+    try {
+      await linkABHA(abhaInput.trim());
+      showToast('ABHA linked successfully!', 'success');
+      setShowABHADialog(false);
+      setAbhaInput('');
+    } catch (error) {
+      // Error already shown by auth context
+    } finally {
+      setIsLinkingABHA(false);
+    }
+  };
+
+  const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newLanguage = e.target.value;
+    updatePreferences({ language: newLanguage });
+    showToast(`Language changed to ${newLanguage}`, 'success');
   };
 
   const handleManageConsents = () => {
@@ -39,7 +62,7 @@ export default function ProfilePage() {
   };
 
   const handleChangePassword = () => {
-    showToast('Opening password change dialog...', 'info');
+    showToast('Password change not available in demo mode', 'info');
   };
 
   const handleViewSessions = () => {
@@ -61,16 +84,28 @@ export default function ProfilePage() {
   const handleLogout = async () => {
     showToast('Logging out...', 'info');
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await logout();
       showToast('Logged out successfully', 'success');
-      setTimeout(() => router.push('/auth/login'), 1000);
+      setTimeout(() => router.push('/'), 1000);
     } catch {
       showToast('Logout failed', 'error');
     }
   };
 
   const handleDeleteAccount = () => {
-    showToast('Account deletion requires confirmation', 'warning');
+    if (confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
+      showToast('Account deletion requires email confirmation', 'warning');
+    }
+  };
+
+  // Get user initials for avatar
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .substring(0, 2);
   };
 
   return (
@@ -79,15 +114,18 @@ export default function ProfilePage() {
         {/* User Identity Card */}
         <div className="bg-gradient-to-br from-[var(--brand)] to-[var(--brand)]/80 text-white rounded-[24px] p-6">
           <div className="flex items-center gap-4 mb-4">
-            <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center text-4xl backdrop-blur-sm">
-              👤
+            <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center text-2xl font-bold backdrop-blur-sm">
+              {user?.name ? getInitials(user.name) : '👤'}
             </div>
             <div>
-              <h2 className="text-2xl font-bold">Guest User</h2>
-              <p className="text-white/80">guest@vaidya.health</p>
+              <h2 className="text-2xl font-bold">{user?.name || 'Guest User'}</h2>
+              <p className="text-white/80">{user?.email || user?.userId || 'guest@vaidya.health'}</p>
+              {user?.phone && (
+                <p className="text-white/70 text-sm mt-1">📱 {user.phone}</p>
+              )}
             </div>
           </div>
-          <button 
+          <button
             onClick={handleEditProfile}
             className="bg-white text-[var(--brand)] px-4 py-2 rounded-xl font-medium hover:bg-white/90 transition-colors"
           >
@@ -97,26 +135,95 @@ export default function ProfilePage() {
 
         {/* ABHA Account Management */}
         <Section title="ABHA Health ID" icon="🔗">
-          <div className="bg-[var(--accent)]/10 border border-[var(--accent)]/30 rounded-xl p-4 mb-4">
-            <div className="flex items-start gap-2">
-              <span className="text-xl">⚠️</span>
-              <div>
-                <p className="font-medium text-[var(--foreground)] mb-1">
-                  ABHA not linked
-                </p>
-                <p className="text-sm text-[var(--muted)]">
-                  Link your ABHA to access complete health records across all healthcare facilities
-                </p>
+          {user?.abhaLinked ? (
+            <>
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 mb-4">
+                <div className="flex items-start gap-2">
+                  <span className="text-xl">✅</span>
+                  <div>
+                    <p className="font-medium text-[var(--foreground)] mb-1">
+                      ABHA linked successfully
+                    </p>
+                    <p className="text-sm text-[var(--muted)]">
+                      {user.abhaAddress}
+                    </p>
+                    <p className="text-sm text-[var(--muted)] mt-2">
+                      Your health records are now accessible across all ABDM-enabled facilities
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <Button onClick={() => router.push('/records')} className="w-full">
+                Manage Health Records →
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="bg-[var(--accent)]/10 border border-[var(--accent)]/30 rounded-xl p-4 mb-4">
+                <div className="flex items-start gap-2">
+                  <span className="text-xl">⚠️</span>
+                  <div>
+                    <p className="font-medium text-[var(--foreground)] mb-1">
+                      ABHA not linked
+                    </p>
+                    <p className="text-sm text-[var(--muted)]">
+                      Link your ABHA to access complete health records across all healthcare facilities
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <Button onClick={() => setShowABHADialog(true)} className="w-full">
+                Link ABHA Account →
+              </Button>
+              <p className="text-xs text-[var(--muted)] mt-2">
+                Enter your ABHA address (e.g., username@abdm)
+              </p>
+            </>
+          )}
+        </Section>
+
+        {/* ABHA Linking Dialog */}
+        {showABHADialog && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 p-6 shadow-xl">
+              <h3 className="text-xl font-bold mb-4">Link ABHA Account</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    ABHA Address
+                  </label>
+                  <input
+                    type="text"
+                    value={abhaInput}
+                    onChange={(e) => setAbhaInput(e.target.value)}
+                    placeholder="username@abdm"
+                    className="w-full px-4 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]"
+                  />
+                  <p className="text-xs text-[var(--muted)] mt-2">
+                    Example: john.doe@abdm or 91-1234-5678-9012@abdm
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => setShowABHADialog(false)}
+                    variant="secondary"
+                    className="flex-1"
+                    disabled={isLinkingABHA}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleLinkABHA}
+                    className="flex-1"
+                    disabled={isLinkingABHA || !abhaInput.trim()}
+                  >
+                    {isLinkingABHA ? 'Linking...' : 'Link ABHA'}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
-          <Button onClick={handleLinkABHA} className="w-full">
-            Link ABHA Account →
-          </Button>
-          <p className="text-xs text-[var(--muted)] mt-2">
-            You will be redirected to ABDM portal for secure authentication
-          </p>
-        </Section>
+        )}
 
         {/* Language & Region */}
         <Section title="Language & Region" icon="🌐">
@@ -125,16 +232,20 @@ export default function ProfilePage() {
               <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
                 Primary Language
               </label>
-              <select className="w-full px-4 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/50">
-                <option value="en">English</option>
-                <option value="hi">हिंदी (Hindi)</option>
-                <option value="kn">ಕನ್ನಡ (Kannada)</option>
-                <option value="ta">தமிழ் (Tamil)</option>
-                <option value="te">తెలుగు (Telugu)</option>
-                <option value="bn">বাংলা (Bengali)</option>
-                <option value="mr">मराठी (Marathi)</option>
-                <option value="gu">ગુજરાતી (Gujarati)</option>
-                <option value="pa">ਪੰਜਾਬੀ (Punjabi)</option>
+              <select
+                value={user?.language || 'English'}
+                onChange={handleLanguageChange}
+                className="w-full px-4 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/50"
+              >
+                <option value="English">English</option>
+                <option value="Hindi">हिंदी (Hindi)</option>
+                <option value="Kannada">ಕನ್ನಡ (Kannada)</option>
+                <option value="Tamil">தமிழ் (Tamil)</option>
+                <option value="Telugu">తెలుగు (Telugu)</option>
+                <option value="Bengali">বাংলা (Bengali)</option>
+                <option value="Marathi">मराठी (Marathi)</option>
+                <option value="Gujarati">ગુજરાતી (Gujarati)</option>
+                <option value="Punjabi">ਪੰਜਾਬੀ (Punjabi)</option>
               </select>
             </div>
 

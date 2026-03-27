@@ -3,22 +3,66 @@
 import { AppLayout } from '@/components/layout';
 import { ConsentBadge, Button } from '@/components/shared';
 import { useToast } from '@/components/shared/Toast';
-import { useState } from 'react';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { useABDM, type ABDMConsent } from '@/lib/hooks/useABDM';
+import { useState, useEffect } from 'react';
 
 export default function RecordsPage() {
   const [activeFilter, setActiveFilter] = useState<'all' | 'prescriptions' | 'diagnostics' | 'visits' | 'vaccinations'>('all');
+  const [consents, setConsents] = useState<ABDMConsent[]>([]);
+  const [showConsentModal, setShowConsentModal] = useState(false);
   const { showToast } = useToast();
+  const { user, linkABHA } = useAuth();
+  const { loading, error, listConsents, revokeConsent, clearError } = useABDM();
 
-  const handleLinkABHA = () => {
-    showToast('Redirecting to ABHA linking...', 'info');
-    // In production: Redirect to ABDM linking flow
-    setTimeout(() => {
-      showToast('ABHA linking requires OTP verification', 'warning');
-    }, 1500);
+  // Fetch consents when component mounts
+  useEffect(() => {
+    const fetchConsents = async () => {
+      if (user?.userId) {
+        const fetchedConsents = await listConsents(user.userId);
+        setConsents(fetchedConsents);
+      }
+    };
+
+    fetchConsents();
+  }, [user?.userId, listConsents]);
+
+  // Show error toast
+  useEffect(() => {
+    if (error) {
+      showToast(error, 'error');
+      clearError();
+    }
+  }, [error, showToast, clearError]);
+
+  const handleLinkABHA = async () => {
+    const abhaAddress = prompt('Enter your ABHA address (e.g., username@abdm):');
+    if (!abhaAddress) return;
+
+    try {
+      await linkABHA(abhaAddress);
+      showToast('ABHA linked successfully!', 'success');
+    } catch (err) {
+      showToast('Failed to link ABHA. Please try again.', 'error');
+    }
   };
 
   const handleManageConsents = () => {
-    showToast('Opening consent management...', 'info');
+    setShowConsentModal(true);
+  };
+
+  const handleRevokeAccess = async (consentId: string, facilityName: string) => {
+    if (!confirm(`Revoke access for ${facilityName}?`)) return;
+
+    const success = await revokeConsent(consentId);
+    if (success) {
+      showToast(`Access revoked for ${facilityName}`, 'success');
+      // Refresh consents
+      if (user?.userId) {
+        const updatedConsents = await listConsents(user.userId);
+        setConsents(updatedConsents);
+      }
+    }
   };
 
   const handleViewAccessHistory = () => {
@@ -40,29 +84,141 @@ export default function RecordsPage() {
     showToast(`Opening details: ${title}`, 'info');
   };
 
-  const handleRevokeAccess = (facility: string) => {
-    showToast(`Revoking access for ${facility}...`, 'warning');
-    setTimeout(() => {
-      showToast(`Access revoked for ${facility}`, 'success');
-    }, 1500);
-  };
+  const abhaLinked = user?.abhaLinked || false;
 
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+        {/* Consent Management Modal */}
+        {showConsentModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-2xl rounded-2xl bg-white dark:bg-gray-900 p-6 shadow-xl max-h-[80vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold">Consent Management</h3>
+                <button
+                  onClick={() => setShowConsentModal(false)}
+                  className="text-[var(--muted)] hover:text-[var(--foreground)] text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {consents.length > 0 ? (
+                  consents.map((consent) => (
+                    <div
+                      key={consent.id}
+                      className="border border-[var(--border)] rounded-xl p-4 space-y-3"
+                    >
+                      {/* Header */}
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h4 className="font-semibold text-[var(--foreground)]">
+                            {consent.hipName}
+                          </h4>
+                          <p className="text-sm text-[var(--muted)]">{consent.purpose}</p>
+                        </div>
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            consent.status === 'GRANTED'
+                              ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                              : consent.status === 'REQUESTED'
+                              ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+                              : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                          }`}
+                        >
+                          {consent.status}
+                        </span>
+                      </div>
+
+                      {/* Details */}
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-[var(--muted)]">Data Types</p>
+                          <p className="font-medium text-[var(--foreground)]">
+                            {consent.hiTypes.join(', ')}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[var(--muted)]">Date Range</p>
+                          <p className="font-medium text-[var(--foreground)]">
+                            {new Date(consent.dateRange.from).toLocaleDateString('en-IN')} -{' '}
+                            {new Date(consent.dateRange.to).toLocaleDateString('en-IN')}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Timestamps */}
+                      <div className="text-xs text-[var(--muted)]">
+                        <p>Created: {new Date(consent.createdAt).toLocaleString('en-IN')}</p>
+                        <p>Expires: {new Date(consent.expiryDate).toLocaleString('en-IN')}</p>
+                      </div>
+
+                      {/* Actions */}
+                      {consent.status === 'GRANTED' && (
+                        <button
+                          onClick={async () => {
+                            const success = await revokeConsent(consent.id);
+                            if (success) {
+                              showToast(`Consent revoked for ${consent.hipName}`, 'success');
+                              if (user?.userId) {
+                                const updated = await listConsents(user.userId);
+                                setConsents(updated);
+                              }
+                            }
+                          }}
+                          className="w-full mt-2 px-4 py-2 rounded-xl border border-[var(--danger)] text-[var(--danger)] hover:bg-[var(--danger)]/10 transition-colors text-sm font-medium"
+                        >
+                          Revoke Consent
+                        </button>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-[var(--muted)] mb-4">No consents found</p>
+                    <p className="text-sm text-[var(--muted)]">
+                      Healthcare facilities will request consent to access your health records
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <Button onClick={() => setShowConsentModal(false)} variant="secondary">
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ABHA Wallet Summary */}
         <div className="ui-shell rounded-[30px] p-6">
           <div className="flex items-start justify-between">
             <div>
               <p className="eyebrow mb-2">Health identity</p>
               <h2 className="text-2xl font-bold mb-2 text-[var(--foreground)]">ABHA Health ID</h2>
-              <p className="text-[var(--muted)] mb-4">Link your ABHA to access complete health records</p>
-              <Button onClick={handleLinkABHA}>
-                Link ABHA Account
-              </Button>
+              {abhaLinked ? (
+                <>
+                  <p className="text-[var(--muted)] mb-2">{user?.abhaAddress}</p>
+                  <p className="text-sm text-[var(--brand)] font-medium">✓ Connected to ABDM</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-[var(--muted)] mb-4">Link your ABHA to access complete health records</p>
+                  <Button onClick={handleLinkABHA} disabled={loading}>
+                    {loading ? 'Linking...' : 'Link ABHA Account'}
+                  </Button>
+                </>
+              )}
             </div>
-            <div className="hidden rounded-[24px] border border-[var(--border)] bg-[var(--brand-soft)] px-5 py-4 text-sm font-semibold text-[var(--brand)] md:block">
-              Not linked
+            <div className={`hidden rounded-[24px] border px-5 py-4 text-sm font-semibold md:block ${
+              abhaLinked
+                ? 'bg-[var(--brand-soft)] border-[var(--brand)]/30 text-[var(--brand)]'
+                : 'bg-[var(--surface-strong)] border-[var(--border)] text-[var(--muted)]'
+            }`}>
+              {abhaLinked ? `Linked ✓` : 'Not linked'}
             </div>
           </div>
         </div>
@@ -75,21 +231,40 @@ export default function RecordsPage() {
                 Data Sharing & Consent
               </h3>
               <p className="text-sm text-[var(--muted)]">
-                You control who can access your health records
+                {abhaLinked
+                  ? `You have ${consents.filter(c => c.status === 'GRANTED').length} active consent(s)`
+                  : 'Link ABHA to manage health data consents'
+                }
               </p>
             </div>
-            <button 
-              onClick={handleManageConsents}
-              className="text-[var(--brand)] hover:underline text-sm font-medium"
-            >
-              Manage Consents →
-            </button>
+            {abhaLinked && (
+              <button
+                onClick={handleManageConsents}
+                className="text-[var(--brand)] hover:underline text-sm font-medium"
+              >
+                Manage Consents →
+              </button>
+            )}
           </div>
-          
+
           <div className="flex flex-wrap gap-3">
-            <ConsentBadge status="granted" grantedTo="Apollo Hospital" grantedAt={new Date('2026-03-15')} />
-            <ConsentBadge status="pending" />
-            <ConsentBadge status="granted" grantedTo="Dr. Sharma Clinic" grantedAt={new Date('2026-03-10')} />
+            {abhaLinked && consents.length > 0 ? (
+              consents.slice(0, 3).map((consent) => (
+                <ConsentBadge
+                  key={consent.id}
+                  status={consent.status === 'GRANTED' ? 'granted' : 'pending'}
+                  grantedTo={consent.hipName}
+                  grantedAt={new Date(consent.createdAt)}
+                />
+              ))
+            ) : (
+              <>
+                <ConsentBadge status="pending" />
+                <div className="text-sm text-[var(--muted)] py-2">
+                  {abhaLinked ? 'No active consents' : 'Link ABHA to view consents'}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -152,16 +327,37 @@ export default function RecordsPage() {
             Who can access your data?
           </h3>
           <div className="space-y-3">
-            <AccessItem facility="Apollo Hospital" status="Active" since="March 15, 2026" onRevoke={handleRevokeAccess} />
-            <AccessItem facility="Dr. Sharma Clinic" status="Active" since="March 10, 2026" onRevoke={handleRevokeAccess} />
-            <AccessItem facility="PathLabs" status="Revoked" since="Feb 20, 2026" onRevoke={handleRevokeAccess} />
+            {abhaLinked && consents.length > 0 ? (
+              consents.map((consent) => (
+                <AccessItem
+                  key={consent.id}
+                  consentId={consent.id}
+                  facility={consent.hipName}
+                  status={consent.status === 'GRANTED' ? 'Active' : 'Revoked'}
+                  since={new Date(consent.createdAt).toLocaleDateString('en-IN', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
+                  onRevoke={handleRevokeAccess}
+                />
+              ))
+            ) : (
+              <div className="text-center py-6">
+                <p className="text-sm text-[var(--muted)]">
+                  {abhaLinked ? 'No consents found' : 'Link ABHA to view access history'}
+                </p>
+              </div>
+            )}
           </div>
-          <button 
-            onClick={handleViewAccessHistory}
-            className="mt-4 text-sm text-[var(--brand)] hover:underline font-medium"
-          >
-            View all access history →
-          </button>
+          {abhaLinked && consents.length > 0 && (
+            <button
+              onClick={handleViewAccessHistory}
+              className="mt-4 text-sm text-[var(--brand)] hover:underline font-medium"
+            >
+              View all access history →
+            </button>
+          )}
         </div>
 
         {/* Export Options */}
@@ -253,11 +449,12 @@ function TimelineItem({ date, type, title, facility, description, onViewDetails 
   );
 }
 
-function AccessItem({ facility, status, since, onRevoke }: { 
-  facility: string; 
-  status: 'Active' | 'Revoked'; 
+function AccessItem({ consentId, facility, status, since, onRevoke }: {
+  consentId: string;
+  facility: string;
+  status: 'Active' | 'Revoked';
   since: string;
-  onRevoke: (facility: string) => void;
+  onRevoke: (consentId: string, facilityName: string) => void;
 }) {
   return (
     <div className="flex items-center justify-between bg-[var(--surface-strong)] p-3 rounded-xl">
@@ -270,8 +467,8 @@ function AccessItem({ facility, status, since, onRevoke }: {
           {status}
         </span>
         {status === 'Active' && (
-          <button 
-            onClick={() => onRevoke(facility)}
+          <button
+            onClick={() => onRevoke(consentId, facility)}
             className="text-sm text-[var(--danger)] hover:underline"
           >
             Revoke

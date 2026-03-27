@@ -3,23 +3,53 @@
 import { AppLayout } from '@/components/layout';
 import { StatusCard, Button } from '@/components/shared';
 import { useToast } from '@/components/shared/Toast';
-import { useState } from 'react';
+import { useRAG, type Guideline, type SearchResult } from '@/lib/hooks/useRAG';
+import { useState, useEffect, useCallback } from 'react';
 
 export default function GuidesPage() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedGuide, setSelectedGuide] = useState<string | null>(null);
+  const [selectedGuide, setSelectedGuide] = useState<Guideline | null>(null);
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const { showToast } = useToast();
+  const { loading, error, guidelines, searchResults, fetchAllGuidelines, searchGuidelines, clearError } = useRAG();
 
-  const handleReadGuide = (title: string) => {
-    setSelectedGuide(title);
-    showToast(`Opening: ${title}`, 'info');
-    // In production: Navigate to full guide page or open modal
-  };
+  // Fetch all guidelines on mount
+  useEffect(() => {
+    fetchAllGuidelines();
+  }, [fetchAllGuidelines]);
 
-  const handleShare = async (title: string) => {
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Search when debounced query changes
+  useEffect(() => {
+    if (debouncedQuery.trim()) {
+      searchGuidelines(debouncedQuery, { topK: 10 });
+    }
+  }, [debouncedQuery, searchGuidelines]);
+
+  // Show errors
+  useEffect(() => {
+    if (error) {
+      showToast(error, 'error');
+      clearError();
+    }
+  }, [error, showToast, clearError]);
+
+  const handleReadGuide = useCallback((guideline: Guideline) => {
+    setSelectedGuide(guideline);
+    showToast(`Opening: ${guideline.condition}`, 'info');
+  }, [showToast]);
+
+  const handleShare = async (guideline: Guideline) => {
     const shareData = {
-      title: `Health Guide: ${title}`,
-      text: `Check out this health guide from Vaidya: ${title}`,
+      title: `Health Guide: ${guideline.condition}`,
+      text: `Check out this health guide from Vaidya: ${guideline.condition}`,
       url: window.location.href,
     };
 
@@ -28,7 +58,6 @@ export default function GuidesPage() {
         await navigator.share(shareData);
         showToast('Guide shared successfully!', 'success');
       } else {
-        // Fallback: copy to clipboard
         await navigator.clipboard.writeText(`${shareData.text}\n${shareData.url}`);
         showToast('Link copied to clipboard!', 'success');
       }
@@ -39,8 +68,13 @@ export default function GuidesPage() {
 
   const handleTopicClick = (topic: string) => {
     setSearchQuery(topic);
-    showToast(`Showing guides for: ${topic}`, 'info');
+    showToast(`Searching for: ${topic}`, 'info');
   };
+
+  // Display either search results or all guidelines
+  const displayGuidelines = debouncedQuery.trim()
+    ? searchResults.map(r => r.guideline)
+    : guidelines;
 
   return (
     <AppLayout>
@@ -69,9 +103,12 @@ export default function GuidesPage() {
                 <li>• Remove standing water</li>
                 <li>• Seek immediate care for high fever</li>
               </ul>
-              <Button 
+              <Button
                 variant="secondary"
-                onClick={() => handleReadGuide('Dengue Fever: Prevention & Care')}
+                onClick={() => {
+                  setSearchQuery('Dengue');
+                  showToast('Searching for Dengue guides...', 'info');
+                }}
                 className="!bg-white !text-[var(--accent)] hover:!bg-white/90"
               >
                 Read Dengue Guide →
@@ -104,61 +141,31 @@ export default function GuidesPage() {
         {/* Featured Guides */}
         <div>
           <h3 className="text-lg font-semibold text-[var(--foreground)] mb-4">
-            Featured Health Guides
+            {debouncedQuery.trim() ? `Search Results (${displayGuidelines.length})` : 'Health Guidelines'}
           </h3>
-          <div className="space-y-4">
-            <GuideCard 
-              title="Dengue Fever: Prevention & Care"
-              points={[
-                "High fever, severe headache, and body pain are key symptoms",
-                "Hydrate frequently and monitor platelet count every 12 hours",
-                "Seek immediate care if bleeding, severe abdominal pain, or vomiting"
-              ]}
-              readTime="5 min read"
-              onRead={handleReadGuide}
-              onShare={handleShare}
-              isSelected={selectedGuide === 'Dengue Fever: Prevention & Care'}
-            />
-            
-            <GuideCard 
-              title="Managing Seasonal Allergies"
-              points={[
-                "Spring allergies peak in March-April in North India",
-                "Antihistamines and nasal sprays provide quick relief",
-                "Avoid outdoor activities during high pollen count hours (6-10 AM)"
-              ]}
-              readTime="4 min read"
-              onRead={handleReadGuide}
-              onShare={handleShare}
-              isSelected={selectedGuide === 'Managing Seasonal Allergies'}
-            />
-            
-            <GuideCard 
-              title="Heat Stroke: Recognize & Respond"
-              points={[
-                "Body temperature above 104°F, confusion, rapid pulse are warning signs",
-                "Move to shade immediately, apply cool water, and call emergency",
-                "Prevent by staying hydrated and avoiding midday sun (11 AM - 4 PM)"
-              ]}
-              readTime="3 min read"
-              onRead={handleReadGuide}
-              onShare={handleShare}
-              isSelected={selectedGuide === 'Heat Stroke: Recognize & Respond'}
-            />
 
-            <GuideCard 
-              title="Tuberculosis: Early Detection"
-              points={[
-                "Persistent cough for 2+ weeks, night sweats, and weight loss",
-                "Free TB testing and treatment available at government centers",
-                "Complete full 6-month treatment course even if feeling better"
-              ]}
-              readTime="6 min read"
-              onRead={handleReadGuide}
-              onShare={handleShare}
-              isSelected={selectedGuide === 'Tuberculosis: Early Detection'}
-            />
-          </div>
+          {loading && displayGuidelines.length === 0 ? (
+            <div className="text-center py-8 text-[var(--muted)]">
+              <div className="animate-pulse">Loading guidelines...</div>
+            </div>
+          ) : displayGuidelines.length === 0 ? (
+            <div className="text-center py-8 text-[var(--muted)]">
+              <p>No guidelines found{debouncedQuery.trim() ? ` for "${debouncedQuery}"` : ''}.</p>
+              <p className="text-sm mt-2">Try a different search term.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {displayGuidelines.slice(0, 8).map((guideline) => (
+                <GuideCard
+                  key={guideline.id}
+                  guideline={guideline}
+                  onRead={handleReadGuide}
+                  onShare={handleShare}
+                  isSelected={selectedGuide?.id === guideline.id}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Preventive Health Tips */}
@@ -167,22 +174,22 @@ export default function GuidesPage() {
             Preventive Health Tips
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <TipCard 
+            <TipCard
               title="Stay Hydrated"
               description="Drink 8-10 glasses of water daily, especially in summer"
               icon="💧"
             />
-            <TipCard 
+            <TipCard
               title="Regular Exercise"
               description="30 minutes of moderate activity 5 days a week"
               icon="🏃"
             />
-            <TipCard 
+            <TipCard
               title="Balanced Diet"
               description="Include fruits, vegetables, and whole grains daily"
               icon="🥗"
             />
-            <TipCard 
+            <TipCard
               title="Annual Checkup"
               description="Get routine health screening every 12 months"
               icon="🩺"
@@ -211,6 +218,132 @@ export default function GuidesPage() {
             </li>
           </ul>
         </StatusCard>
+
+        {/* Selected Guideline Detail Modal */}
+        {selectedGuide && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl bg-white dark:bg-gray-900 shadow-xl">
+              <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-[var(--border)] p-4 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-[var(--foreground)]">{selectedGuide.condition}</h2>
+                <button
+                  onClick={() => setSelectedGuide(null)}
+                  className="p-2 hover:bg-[var(--surface-strong)] rounded-full transition-colors"
+                >
+                  <span className="text-xl">✕</span>
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {/* Severity & Category */}
+                <div className="flex gap-2">
+                  <span className={`text-sm px-3 py-1 rounded-full ${
+                    selectedGuide.severity === 'emergency' ? 'bg-red-100 text-red-700' :
+                    selectedGuide.severity === 'severe' ? 'bg-orange-100 text-orange-700' :
+                    selectedGuide.severity === 'moderate' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-green-100 text-green-700'
+                  }`}>
+                    {selectedGuide.severity.toUpperCase()}
+                  </span>
+                  <span className="text-sm px-3 py-1 rounded-full bg-[var(--surface-strong)] text-[var(--muted)]">
+                    {selectedGuide.category}
+                  </span>
+                </div>
+
+                {/* Symptoms */}
+                {selectedGuide.symptoms?.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-[var(--foreground)] mb-2">Symptoms</h3>
+                    <ul className="space-y-1">
+                      {selectedGuide.symptoms.map((symptom, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-sm text-[var(--muted)]">
+                          <span className="text-[var(--danger)]">•</span>
+                          {symptom}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Causes */}
+                {selectedGuide.causes?.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-[var(--foreground)] mb-2">Causes</h3>
+                    <ul className="space-y-1">
+                      {selectedGuide.causes.map((cause, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-sm text-[var(--muted)]">
+                          <span className="text-[var(--accent)]">•</span>
+                          {cause}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Prevention */}
+                {selectedGuide.prevention?.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-[var(--foreground)] mb-2">Prevention</h3>
+                    <ul className="space-y-1">
+                      {selectedGuide.prevention.map((tip, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-sm text-[var(--muted)]">
+                          <span className="text-[var(--brand)]">✓</span>
+                          {tip}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Home Remedies */}
+                {selectedGuide.homeRemedies?.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-[var(--foreground)] mb-2">Home Remedies</h3>
+                    <ul className="space-y-1">
+                      {selectedGuide.homeRemedies.map((remedy, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-sm text-[var(--muted)]">
+                          <span className="text-[var(--brand)]">🏠</span>
+                          {remedy}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* When to Seek Help */}
+                {selectedGuide.whenToSeekHelp?.length > 0 && (
+                  <div className="bg-[var(--danger)]/10 border border-[var(--danger)]/20 rounded-xl p-4">
+                    <h3 className="font-semibold text-[var(--danger)] mb-2">When to Seek Medical Help</h3>
+                    <ul className="space-y-1">
+                      {selectedGuide.whenToSeekHelp.map((warning, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-sm text-[var(--foreground)]">
+                          <span className="text-[var(--danger)]">⚠️</span>
+                          {warning}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Regional Info */}
+                {selectedGuide.regionalInfo && (
+                  <div className="bg-[var(--brand-soft)] rounded-xl p-4">
+                    <h3 className="font-semibold text-[var(--foreground)] mb-2">Regional Information</h3>
+                    <p className="text-sm text-[var(--muted)]">{selectedGuide.regionalInfo.prevalence}</p>
+                    {selectedGuide.regionalInfo.seasonality && (
+                      <p className="text-sm text-[var(--muted)] mt-1">
+                        📅 {selectedGuide.regionalInfo.seasonality}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <Button variant="primary" fullWidth onClick={() => setSelectedGuide(null)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AppLayout>
   );
@@ -230,14 +363,29 @@ function TopicCard({ label, icon, onClick }: { label: string; icon: string; onCl
   );
 }
 
-function GuideCard({ title, points, readTime, onRead, onShare, isSelected }: {
-  title: string;
-  points: string[];
-  readTime: string;
-  onRead: (title: string) => void;
-  onShare: (title: string) => void;
+function GuideCard({ guideline, onRead, onShare, isSelected }: {
+  guideline: Guideline;
+  onRead: (guideline: Guideline) => void;
+  onShare: (guideline: Guideline) => void;
   isSelected?: boolean;
 }) {
+  // Get severity color
+  const getSeverityColor = (severity: string) => {
+    const colors: Record<string, string> = {
+      'mild': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+      'moderate': 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+      'severe': 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+      'emergency': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    };
+    return colors[severity] || 'bg-gray-100 text-gray-700';
+  };
+
+  // Get display points from guideline data
+  const displayPoints = [
+    ...(guideline.symptoms?.slice(0, 2) || []),
+    ...(guideline.whenToSeekHelp?.slice(0, 1) || []),
+  ].slice(0, 3);
+
   return (
     <div className={`
       ui-section rounded-[26px] p-6 transition-all
@@ -245,8 +393,13 @@ function GuideCard({ title, points, readTime, onRead, onShare, isSelected }: {
     `}>
       <div className="flex items-start justify-between mb-3">
         <div>
-          <h4 className="font-semibold text-[var(--foreground)] mb-1">{title}</h4>
-          <span className="text-xs text-[var(--muted)]">{readTime}</span>
+          <h4 className="font-semibold text-[var(--foreground)] mb-1">{guideline.condition}</h4>
+          <div className="flex items-center gap-2">
+            <span className={`text-xs px-2 py-0.5 rounded-full ${getSeverityColor(guideline.severity)}`}>
+              {guideline.severity}
+            </span>
+            <span className="text-xs text-[var(--muted)]">{guideline.category}</span>
+          </div>
         </div>
         {isSelected && (
           <span className="text-xs bg-[var(--brand-soft)] text-[var(--brand)] px-2 py-1 rounded-full">
@@ -254,9 +407,9 @@ function GuideCard({ title, points, readTime, onRead, onShare, isSelected }: {
           </span>
         )}
       </div>
-      
+
       <div className="space-y-2 mb-4">
-        {points.map((point, idx) => (
+        {displayPoints.map((point, idx) => (
           <div key={idx} className="flex items-start gap-2">
             <span className="text-[var(--brand)] mt-0.5">•</span>
             <p className="text-sm text-[var(--muted)]">{point}</p>
@@ -264,17 +417,23 @@ function GuideCard({ title, points, readTime, onRead, onShare, isSelected }: {
         ))}
       </div>
 
+      {guideline.regionalInfo?.prevalence && (
+        <p className="text-xs text-[var(--accent)] mb-3">
+          📍 {guideline.regionalInfo.prevalence}
+        </p>
+      )}
+
       <div className="flex gap-2">
-        <Button 
-          variant="primary" 
+        <Button
+          variant="primary"
           className="flex-1"
-          onClick={() => onRead(title)}
+          onClick={() => onRead(guideline)}
         >
           Read Full Guide
         </Button>
-        <Button 
+        <Button
           variant="secondary"
-          onClick={() => onShare(title)}
+          onClick={() => onShare(guideline)}
           icon={<span>📤</span>}
         >
           Share

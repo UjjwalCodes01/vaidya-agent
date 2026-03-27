@@ -3,6 +3,7 @@
 import { EmergencyFAB } from '../shared/EmergencyFAB';
 import { BottomNav } from '../shared/BottomNav';
 import { TrustSignals } from '../shared/TrustSignals';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -15,11 +16,13 @@ interface AppLayoutProps {
  * Wraps all pages with consistent navigation and emergency access
  */
 export function AppLayout({ children, showNav = true, showEmergencyFAB = true }: AppLayoutProps) {
-  // TODO: Get user context from auth
-  const user = {
-    name: 'User',
-    abhaLinked: false,
-    language: 'English'
+  const { user, isLoading } = useAuth();
+
+  // Default values while loading or if no user
+  const displayUser = {
+    name: user?.name || 'User',
+    abhaLinked: user?.abhaLinked || false,
+    language: user?.language || 'English'
   };
 
   return (
@@ -40,8 +43,8 @@ export function AppLayout({ children, showNav = true, showEmergencyFAB = true }:
               </div>
             </div>
             <TrustSignals
-              abhaLinked={user.abhaLinked}
-              language={user.language}
+              abhaLinked={displayUser.abhaLinked}
+              language={displayUser.language}
               consentProtected={true}
             />
           </div>
