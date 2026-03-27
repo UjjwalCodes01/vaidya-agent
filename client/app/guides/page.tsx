@@ -3,7 +3,7 @@
 import { AppLayout } from '@/components/layout';
 import { StatusCard, Button } from '@/components/shared';
 import { useToast } from '@/components/shared/Toast';
-import { useRAG, type Guideline, type SearchResult } from '@/lib/hooks/useRAG';
+import { useRAG, type Guideline } from '@/lib/hooks/useRAG';
 import { useState, useEffect, useCallback } from 'react';
 
 export default function GuidesPage() {

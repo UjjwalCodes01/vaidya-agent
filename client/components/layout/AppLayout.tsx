@@ -16,7 +16,7 @@ interface AppLayoutProps {
  * Wraps all pages with consistent navigation and emergency access
  */
 export function AppLayout({ children, showNav = true, showEmergencyFAB = true }: AppLayoutProps) {
-  const { user, isLoading } = useAuth();
+  const { user } = useAuth();
 
   // Default values while loading or if no user
   const displayUser = {

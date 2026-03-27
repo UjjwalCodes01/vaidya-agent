@@ -10,6 +10,7 @@ interface LastTriage {
   timestamp: string;
   severity: string;
   suspectedConditions: string[];
+  summary?: string;
 }
 
 interface HealthAlert {
@@ -24,10 +25,10 @@ interface HealthAlert {
  * Home Page Features
  */
 export function HomeFeatures() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user } = useAuth();
   const [lastTriage, setLastTriage] = useState<LastTriage | null>(null);
   const [healthAlert, setHealthAlert] = useState<HealthAlert | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
 
   // Fetch last triage session and health alerts
   useEffect(() => {
@@ -48,6 +49,28 @@ export function HomeFeatures() {
             });
           }
         }
+        
+        // Attempt to fetch last triage session (if user is logged in)
+        if (user?.abhaAddress) {
+          try {
+            const triageRes = await fetch('/api/agent/session?latest=true');
+            if (triageRes.ok) {
+              const triageData = await triageRes.json();
+              if (triageData.success && triageData.data?.session) {
+                const session = triageData.data.session;
+                setLastTriage({
+                  sessionId: session.id || '',
+                  severity: session.severity || 'low',
+                  summary: session.summary || 'Previous consultation available',
+                  timestamp: session.createdAt || new Date().toISOString(),
+                  suspectedConditions: session.suspectedConditions || [],
+                });
+              }
+            }
+          } catch {
+            // Silently ignore - last triage is optional
+          }
+        }
       } catch (error) {
         console.error('[Home] Error fetching data:', error);
       } finally {
@@ -56,7 +79,7 @@ export function HomeFeatures() {
     };
 
     fetchData();
-  }, []);
+  }, [user?.abhaAddress]);
 
   // Determine ABHA status
   const abhaLinked = user?.abhaLinked || false;

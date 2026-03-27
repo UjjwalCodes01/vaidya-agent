@@ -25,7 +25,7 @@ export default function CareFinderPage() {
         latitude: position.latitude,
         longitude: position.longitude,
         radius: emergencyMode ? 3000 : 10000, // 3km for emergency, 10km normal
-        type: facilityType as any,
+        type: facilityType,
         emergency: emergencyMode,
       });
     }

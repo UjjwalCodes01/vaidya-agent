@@ -31,7 +31,7 @@ export default function ProfilePage() {
       showToast('ABHA linked successfully!', 'success');
       setShowABHADialog(false);
       setAbhaInput('');
-    } catch (error) {
+    } catch {
       // Error already shown by auth context
     } finally {
       setIsLinkingABHA(false);

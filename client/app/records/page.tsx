@@ -42,7 +42,7 @@ export default function RecordsPage() {
     try {
       await linkABHA(abhaAddress);
       showToast('ABHA linked successfully!', 'success');
-    } catch (err) {
+    } catch {
       showToast('Failed to link ABHA. Please try again.', 'error');
     }
   };

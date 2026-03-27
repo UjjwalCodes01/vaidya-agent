@@ -132,15 +132,18 @@ export function useLocation(): UseLocationReturn {
         throw new Error('Location is required. Please enable location access.');
       }
 
+      // API expects gps as "lat,lng" string format
+      const gps = `${lat},${lng}`;
+      const radiusKm = (params.radius || 5000) / 1000; // Convert meters to km
+      
       const response = await fetch('/api/location/phc/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          latitude: lat,
-          longitude: lng,
-          radius: params.radius || 5000, // Default 5km
-          type: params.type,
-          emergency: params.emergency,
+          gps,
+          radiusKm,
+          facilityTypes: params.type ? [params.type] : undefined,
+          includePrivate: params.emergency, // Emergency searches include private facilities
         }),
       });
 
@@ -170,19 +173,17 @@ export function useLocation(): UseLocationReturn {
         throw new Error('Current location not available');
       }
 
+      // API expects GPS as "lat,lng" string format
+      const fromGPS = `${position.latitude},${position.longitude}`;
+      const facilityGPS = `${destination.latitude},${destination.longitude}`;
+
       const response = await fetch('/api/location/directions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          origin: {
-            latitude: position.latitude,
-            longitude: position.longitude,
-          },
-          destination: {
-            latitude: destination.latitude,
-            longitude: destination.longitude,
-          },
-          mode: 'driving',
+          fromGPS,
+          facilityGPS,
+          travelMode: 'driving',
         }),
       });
 

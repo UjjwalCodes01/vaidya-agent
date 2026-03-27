@@ -63,17 +63,55 @@ export function BookingModal({ isOpen, onClose, facilityName, facilityId }: Book
     setLoading(true);
 
     try {
-      // In production: Call /api/uhi/select and /api/uhi/confirm
+      // Generate UHI-compliant transaction and message IDs
+      const transactionId = `txn_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      
+      // Create appointment timestamp from slot (demo uses current date + slot time)
+      const now = new Date();
+      const slotTime = selectedSlot?.time.replace(' AM', ':00').replace(' PM', ':00') || '09:00:00';
+      const appointmentDate = selectedSlot?.date === 'Tomorrow' 
+        ? new Date(now.getTime() + 24 * 60 * 60 * 1000) 
+        : now;
+      const appointmentTimestamp = new Date(
+        appointmentDate.toISOString().split('T')[0] + 'T' + slotTime.padStart(8, '0')
+      ).toISOString();
+
+      // Build UHI-compliant payload
+      const uhiPayload = {
+        order: {
+          provider: {
+            id: facilityId || `facility_${facilityName.toLowerCase().replace(/\s+/g, '_')}`,
+          },
+          items: [
+            {
+              id: selectedSlot?.id || 'consultation_001',
+              quantity: 1,
+            },
+          ],
+          fulfillment: {
+            end: {
+              time: {
+                timestamp: appointmentTimestamp,
+              },
+            },
+          },
+          customer: {
+            id: `${patientDetails.phone.replace(/\D/g, '')}@abdm`, // Create ABHA-format ID from phone
+            cred: 'demo_credential', // In production, use real ABHA credential
+          },
+        },
+        context: {
+          domain: 'nic2004:85111',
+          transaction_id: transactionId,
+          message_id: messageId,
+        },
+      };
+
       const response = await fetch('/api/uhi/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          facilityId,
-          slotId: selectedSlot?.id,
-          patientName: patientDetails.name,
-          patientPhone: patientDetails.phone,
-          reason: patientDetails.reason,
-        }),
+        body: JSON.stringify(uhiPayload),
       });
 
       const data = await response.json();
@@ -84,7 +122,7 @@ export function BookingModal({ isOpen, onClose, facilityName, facilityId }: Book
       } else {
         throw new Error(data.error?.message || 'Booking failed');
       }
-    } catch (error) {
+    } catch {
       // For hackathon demo, show success anyway
       setStep('success');
       showToast('Appointment booked successfully! (Demo mode)', 'success');

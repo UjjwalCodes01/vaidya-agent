@@ -190,9 +190,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setState(prev => ({ ...prev, isLoading: true }));
 
     try {
-      // Call logout API
-      await fetch('/api/auth/logout', {
-        method: 'POST',
+      // Call logout API - uses DELETE method on /api/auth/login
+      await fetch('/api/auth/login', {
+        method: 'DELETE',
         credentials: 'include',
       });
     } catch (error) {
